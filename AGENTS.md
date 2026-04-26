@@ -10,7 +10,7 @@ The primary author syncs a `.kdbx` between Linux (KeePassXC) and iOS (Strongbox)
 
 ## Why no custom envelope format
 
-Quantum computers threaten asymmetric crypto (Shor's algorithm) far more than symmetric crypto (Grover gives only a quadratic speedup). KDBX4 with AES-256 or ChaCha20 + Argon2id is already considered post-quantum-secure at rest. Wrapping the file in a custom PQ envelope would solve a problem that doesn't really exist while breaking compatibility with every other KeePass client. The valuable PQ-related work is *audit*: making sure users are actually on the safe configurations.
+Quantum computers threaten asymmetric crypto (Shor's algorithm) far more than symmetric crypto (Grover gives only a quadratic speedup). KDBX4 with AES-256 or ChaCha20 + Argon2id is already considered post-quantum-secure at rest. Wrapping the file in a custom PQ envelope would solve a problem that doesn't really exist while breaking compatibility with every other KeePass client. The valuable PQ-related work is _audit_: making sure users are actually on the safe configurations.
 
 ## Non-negotiable rules
 
@@ -102,7 +102,7 @@ cd app && bun run tauri ios dev
 
 - Adding a new audit rule (especially anything claiming "post-quantum risk")
 - Bumping `keepass-rs` or any pinned crypto crate to a new minor/major
-- Modifying anything that changes how a file is *written* (vs. read)
+- Modifying anything that changes how a file is _written_ (vs. read)
 - Adding a new platform target
 - Anything that touches sync semantics (file locking, conflict detection, merge logic)
 

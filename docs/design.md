@@ -21,12 +21,12 @@ freekee writes only standard KDBX4. Files written by freekee can be opened, edit
 
 - Custom file format. We use standard KDBX4.
 - Custom cryptographic primitives. We rely on what KeePass already specifies.
-- A post-quantum *envelope* around KDBX. The threat model does not justify it (see §4.2).
+- A post-quantum _envelope_ around KDBX. The threat model does not justify it (see §4.2).
 - Browser autofill in v1 (post-v1 milestone).
 - iOS AutoFill extension in v0.1 (deferred to v0.2).
 - Apple Watch, Android Wear (post-v1).
 - Cloud-hosted vault service.
-- Backwards compatibility with KDBX3.x or KDB1 for *writing*. Read-only import (with an offer to upgrade to KDBX4) is acceptable.
+- Backwards compatibility with KDBX3.x or KDB1 for _writing_. Read-only import (with an offer to upgrade to KDBX4) is acceptable.
 
 ## 4. Threat model
 
@@ -50,7 +50,7 @@ KDBX4 at-rest encryption is symmetric throughout. There is no public-key cryptog
   - SHA-256 → ~128 bits collision PQ. Comfortable.
 - **Argon2id** is memory-hard. Grover provides limited benefit; the bottleneck is memory bandwidth, not gate count. Strong parameters remain strong.
 
-Conclusion: **a properly configured KDBX4 file is post-quantum-secure at rest under current cryptographic understanding.** The right intervention is *configuration audit*, not a new format. This is the central design call.
+Conclusion: **a properly configured KDBX4 file is post-quantum-secure at rest under current cryptographic understanding.** The right intervention is _configuration audit_, not a new format. This is the central design call.
 
 Caveat for the threat model: this assumes Grover-on-symmetric is the dominant quantum threat. If novel quantum (or classical) attacks against AES, ChaCha20, or Argon2 emerge, we update the audit rules.
 
@@ -115,6 +115,7 @@ The audit crate is freekee's headline differentiator. It takes a parsed database
 ### 7.1 Finding categories
 
 **Cipher / format:**
+
 - `weak-outer-cipher`: outer cipher is AES-128. Severity: high. Cite NIST PQC guidance on Grover.
 - `legacy-stream-cipher`: inner stream cipher is Salsa20 or ARC4. Severity: medium. Recommend ChaCha20.
 - `legacy-kdf`: KDF is AES-KDF. Severity: high. Recommend Argon2id.
@@ -122,10 +123,12 @@ The audit crate is freekee's headline differentiator. It takes a parsed database
 - `legacy-kdbx-version`: file is KDBX 3.x. Severity: medium. Recommend upgrade to 4.x.
 
 **Composite key:**
+
 - `weak-passphrase`: zxcvbn estimate < 60 bits. Severity: high. Note: `zxcvbn-rs` 3.1.1 caps `guesses_log10` at ~19.27 (≈64 bits), so this threshold is the practical ceiling — anything stricter cannot be expressed with the current estimator.
 - `passphrase-only`: no keyfile, no HMAC challenge. Severity: low (informational).
 
 **Entries:**
+
 - `weak-entry-password`: zxcvbn < 50 bits. Severity: medium per entry.
 - `reused-password`: same password across multiple entries. Severity: medium.
 - `stale-password`: not changed in > 180 days (configurable). Severity: low.
@@ -133,6 +136,7 @@ The audit crate is freekee's headline differentiator. It takes a parsed database
 - `expired-entry-overdue`: entry's `Expires` is in the past. Severity: low.
 
 **Attachments:**
+
 - `large-attachment`: > 5 MiB; informational, not a security issue.
 
 ### 7.2 Output contract
@@ -192,6 +196,7 @@ freekee merge <a> <b> -o <out> [--base <c>]
 ```
 
 Conventions:
+
 - Entry paths use `Group/Subgroup/EntryTitle`.
 - Passphrases come from `$FREEKEE_PASS`, prompt, or stdin (`--pass-stdin`).
 - Output is human-readable by default; `--json` emits machine format.
@@ -225,13 +230,13 @@ Known friction: developing on a physical iOS device requires Xcode open with the
 
 ## 11. Phasing
 
-| Milestone | Scope                                                                 |
-|-----------|-----------------------------------------------------------------------|
+| Milestone | Scope                                                                                                                                                   |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | v0.1.0    | CLI + Linux desktop GUI. `kdbx`, `audit`, `core`, `cli`, `tauri-bridge`, desktop app. All audit rules. All rotation commands. Roundtrip fixtures green. |
-| v0.2.0    | iOS app: Keychain plugin, biometric unlock, Files-app picker. macOS + Windows desktop builds. |
-| v0.3.0    | iOS AutoFill extension. Android app. |
-| v0.4.0    | Browser extension (separate repo, talks to native messaging host).    |
-| v1.0.0    | Stable interface frozen, security review completed, packaged binaries for all targets, audit ruleset published as a versioned spec. |
+| v0.2.0    | iOS app: Keychain plugin, biometric unlock, Files-app picker. macOS + Windows desktop builds.                                                           |
+| v0.3.0    | iOS AutoFill extension. Android app.                                                                                                                    |
+| v0.4.0    | Browser extension (separate repo, talks to native messaging host).                                                                                      |
+| v1.0.0    | Stable interface frozen, security review completed, packaged binaries for all targets, audit ruleset published as a versioned spec.                     |
 
 Suggested calendar: v0.1 in 6–8 weeks of focused work (faster than the prior plan since there's no envelope crate); v0.2 another 4–6.
 

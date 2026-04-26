@@ -112,6 +112,7 @@ pub fn run(db: &kdbx::Database, passphrase: &str, config: &AuditConfig) -> Vec<F
     if let Some(f) = rules::passphrase::weak_passphrase(passphrase, config) {
         findings.push(f);
     }
+    findings.extend(rules::entries::weak_entry_passwords(db, config));
 
     findings
 }

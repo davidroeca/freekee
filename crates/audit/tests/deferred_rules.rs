@@ -31,25 +31,7 @@ fn flags_passphrase_only_composite_key() {
     );
 }
 
-// ─── A8: weak-entry-password ──────────────────────────────────────────────
-
-#[test]
-#[ignore = "M1: A8 weak-entry-password (zxcvbn < `weak_entry_password_bits`)"]
-fn flags_weak_entry_password() {
-    let mut inner = keepass::Database::new();
-    inner.config.kdf_config = strong_kdf();
-    let mut root = inner.root_mut();
-    let mut entry = root.add_entry();
-    entry.set_unprotected(keepass::db::fields::TITLE, "Mail");
-    entry.set_protected(keepass::db::fields::PASSWORD, "123456");
-    let database = kdbx::Database::__from_keepass(inner);
-
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
-    assert!(
-        findings.iter().any(|f| f.rule == "weak-entry-password"),
-        "expected weak-entry-password finding for `123456`",
-    );
-}
+// A8 (weak-entry-password) is now implemented; tests live in rules.rs.
 
 // ─── A9: reused-password ──────────────────────────────────────────────────
 

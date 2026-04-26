@@ -195,6 +195,102 @@ fn does_not_flag_kdbx4_version() {
     assert!(!findings.iter().any(|f| f.rule == "legacy-kdbx-version"));
 }
 
+// ─── A8: weak-entry-password ──────────────────────────────────────────────
+
+#[test]
+fn flags_weak_entry_password() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    let entry_password = "123456";
+    {
+        let mut root = inner.root_mut();
+        let mut entry = root.add_entry();
+        entry.set_unprotected(keepass::db::fields::TITLE, "Mail");
+        entry.set_protected(keepass::db::fields::PASSWORD, entry_password);
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let f = findings
+        .iter()
+        .find(|f| f.rule == "weak-entry-password")
+        .expect("expected weak-entry-password finding");
+    assert_eq!(f.severity, Severity::Medium);
+    assert!(
+        f.message.contains("Mail"),
+        "finding should reference entry by title; got: {}",
+        f.message,
+    );
+    // Plaintext password must not leak into any user-facing field.
+    assert!(
+        !f.message.contains(entry_password),
+        "entry password leaked into finding message: {}",
+        f.message,
+    );
+    assert!(
+        !f.remediation.contains(entry_password),
+        "entry password leaked into remediation: {}",
+        f.remediation,
+    );
+    assert!(!f.citation.is_empty(), "citation must be populated");
+}
+
+#[test]
+fn does_not_flag_strong_entry_password() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    {
+        let mut root = inner.root_mut();
+        let mut entry = root.add_entry();
+        entry.set_unprotected(keepass::db::fields::TITLE, "Bank");
+        entry.set_protected(keepass::db::fields::PASSWORD, STRONG_PASSPHRASE);
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    assert!(!findings.iter().any(|f| f.rule == "weak-entry-password"));
+}
+
+#[test]
+fn weak_entry_password_walks_nested_groups() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    let weak = "qwerty";
+    {
+        let mut root = inner.root_mut();
+        let mut sub = root.add_group();
+        sub.name = "Web".into();
+        let mut entry = sub.add_entry();
+        entry.set_unprotected(keepass::db::fields::TITLE, "Forum");
+        entry.set_protected(keepass::db::fields::PASSWORD, weak);
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let f = findings
+        .iter()
+        .find(|f| f.rule == "weak-entry-password")
+        .expect("entries inside subgroups must also be audited");
+    assert!(f.message.contains("Forum"));
+    assert!(!f.message.contains(weak), "password leaked: {}", f.message);
+}
+
+#[test]
+fn ignores_entry_with_no_password_field() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    {
+        let mut root = inner.root_mut();
+        let mut entry = root.add_entry();
+        entry.set_unprotected(keepass::db::fields::TITLE, "Note-only");
+        // No password set.
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    assert!(!findings.iter().any(|f| f.rule == "weak-entry-password"));
+}
+
 // ─── A6: weak-passphrase ──────────────────────────────────────────────────
 
 #[test]

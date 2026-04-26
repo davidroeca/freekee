@@ -124,6 +124,13 @@ impl Database {
             .map(|inner| Entry { inner })
     }
 
+    /// Iterator over every current entry in the database, recursively
+    /// across all groups. Historical (prior-version) entries are not
+    /// included; access them via [`Entry::history`] when added.
+    pub fn entries(&self) -> impl Iterator<Item = Entry<'_>> + '_ {
+        self.inner.iter_all_entries().map(|inner| Entry { inner })
+    }
+
     /// Outer cipher recorded in the file header.
     pub fn outer_cipher(&self) -> OuterCipher {
         use keepass::config::OuterCipherConfig as C;

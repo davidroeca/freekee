@@ -1,0 +1,21 @@
+[package]
+name = "freekee-core"
+description = "freekee orchestrator: vault open/save, rotation, audit invocation. See docs/design.md §5."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+kdbx = { path = "../kdbx" }
+audit = { path = "../audit" }
+
+[lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"
+
+[lints.clippy]
+unwrap_used = "warn"
+needless_collect = "warn"

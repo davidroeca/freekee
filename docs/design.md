@@ -122,13 +122,13 @@ The audit crate is freekee's headline differentiator. It takes a parsed database
 - `legacy-kdbx-version`: file is KDBX 3.x. Severity: medium. Recommend upgrade to 4.x.
 
 **Composite key:**
-- `weak-passphrase`: zxcvbn estimate < 60 bits. Severity: high.
+- `weak-passphrase`: zxcvbn estimate < 60 bits. Severity: high. Note: `zxcvbn-rs` 3.1.1 caps `guesses_log10` at ~19.27 (≈64 bits), so this threshold is the practical ceiling — anything stricter cannot be expressed with the current estimator.
 - `passphrase-only`: no keyfile, no HMAC challenge. Severity: low (informational).
 
 **Entries:**
 - `weak-entry-password`: zxcvbn < 50 bits. Severity: medium per entry.
 - `reused-password`: same password across multiple entries. Severity: medium.
-- `stale-password`: not changed in > 365 days (configurable). Severity: low.
+- `stale-password`: not changed in > 180 days (configurable). Severity: low.
 - `breached-password`: HIBP k-anonymity API match. Severity: critical. **Opt-in only**, off by default.
 - `expired-entry-overdue`: entry's `Expires` is in the past. Severity: low.
 

@@ -212,3 +212,6 @@ ehthumbs.db
 *.rej
 .history/
 .cargo/config.toml.local
+
+# Local clones of upstream deps for investigation. Never tracked.
+/vendor/

@@ -22,7 +22,7 @@ Quantum computers threaten asymmetric crypto (Shor's algorithm) far more than sy
 
 If you find yourself writing implementation code without a failing test on disk, stop and write the test first. Crypto-adjacent code (KDF parameter changes, cipher selection logic, audit checks) especially.
 
-**Never write or modify cryptographic primitives.** We use audited crates only — primarily whatever `keepass-ng` already pulls in (AES, ChaCha20, Argon2, HMAC). If a task seems to require touching primitive crypto directly, stop and ask the human.
+**Never write or modify cryptographic primitives.** We use audited crates only — primarily whatever `keepass-rs` already pulls in (AES, ChaCha20, Argon2, HMAC). If a task seems to require touching primitive crypto directly, stop and ask the human.
 
 **Never log, print, or include in error messages:** plaintext passwords, master passphrases, derived keys, keyfile contents, or decrypted entry values. Error types must not embed secret material. Use `zeroize` for in-memory secrets where the underlying types support it. There is a meta-test that runs the CLI with a known plaintext, captures all stdout/stderr, and grep's for the plaintext — keep it green.
 
@@ -34,7 +34,7 @@ If you find yourself writing implementation code without a failing test on disk,
 
 Monorepo Cargo workspace. See `docs/design.md` for full crate responsibilities. Quick map:
 
-- `crates/kdbx/` — wraps `keepass-ng` behind a stable trait; isolates upstream churn
+- `crates/kdbx/` — wraps `keepass-rs` behind a stable trait; isolates upstream churn
 - `crates/audit/` — pure analysis: takes a parsed database, returns findings
 - `crates/core/` — orchestrator: `Vault::open`, `vault.save`, rotation operations, audit invocation
 - `crates/cli/` — `freekee` binary, clap-based, no business logic
@@ -42,7 +42,7 @@ Monorepo Cargo workspace. See `docs/design.md` for full crate responsibilities. 
 - `app/src-tauri/` — single Tauri 2 project, emits desktop + mobile
 - `plugins/tauri-plugin-keychain/` — iOS Keychain / Android Keystore
 
-Crate boundaries are enforced. The frontend never sees `core` types directly — only DTOs from `tauri-bridge`. The CLI never imports `keepass-ng` directly — only `core`. If you need to bypass a boundary, that's a design discussion, not a code change.
+Crate boundaries are enforced. The frontend never sees `core` types directly — only DTOs from `tauri-bridge`. The CLI never imports `keepass-rs` directly — only `core`. If you need to bypass a boundary, that's a design discussion, not a code change.
 
 ## JS/TS toolchain: Bun
 
@@ -96,14 +96,12 @@ cd app && bun run tauri ios dev
 - `unsafe` is forbidden in `crates/audit/` and `crates/core/`. Allowed elsewhere only with a `// SAFETY:` comment.
 - Order by cost: when a function tries multiple strategies, put the cheapest one first (e.g., check a known path before scanning a directory).
 - Avoid needless allocations: prefer borrowing (`&str`, `&Value`) over `.to_string()` / `.cloned()` when the owned value isn't needed.
-- Avoid `.unwrap()` in production code: use `?`, `.expect("reason")`, or combinators (`.unwrap_or`, `.map`). `.unwrap()` is acceptable in `#[test]` functions and `#[cfg(test)]` modules.
-
-  > Also enforced as constraints in `cli.spec.yaml` for retroactive drift detection.
+- Avoid `.unwrap()` in production code: use `?`, `.expect("reason")`, or combinators (`.unwrap_or`, `.map`). `.unwrap()` is acceptable in `#[test]` functions and `#[cfg(test)]` modules. Also enforced as a `clippy.toml` `disallowed-methods` rule.
 
 ## Things to ask the human before doing
 
 - Adding a new audit rule (especially anything claiming "post-quantum risk")
-- Bumping `keepass-ng` or any pinned crypto crate to a new minor/major
+- Bumping `keepass-rs` or any pinned crypto crate to a new minor/major
 - Modifying anything that changes how a file is *written* (vs. read)
 - Adding a new platform target
 - Anything that touches sync semantics (file locking, conflict detection, merge logic)

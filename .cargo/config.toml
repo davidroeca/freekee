@@ -1,0 +1,5 @@
+# Per-developer overrides go in .cargo/config.toml.local (gitignored).
+# CI sets RUSTFLAGS="-D warnings" via the workflow env block.
+
+[build]
+# nothing global yet

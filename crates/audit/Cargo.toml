@@ -1,0 +1,36 @@
+[package]
+name = "audit"
+description = "freekee KDBX4 configuration audit. Pure analysis, no I/O. See docs/design.md §7."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+kdbx = { path = "../kdbx" }
+zxcvbn.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+
+[dev-dependencies]
+# Tests construct `keepass::Database` instances with weak settings and
+# wrap them via the doc-hidden `kdbx::Database::__from_keepass` to
+# avoid Argon2 cost. Audit logic itself does not depend on `keepass`.
+keepass.workspace = true
+# `keepass`'s `KdfConfig` requires `argon2::Version`. Crate is named
+# `rust-argon2` on crates.io but exposes itself as `argon2` in code.
+rust-argon2 = "3.0"
+
+# AGENTS.md: `unsafe` is forbidden in audit and core. Stronger than the
+# workspace `deny`, so we override locally rather than inherit.
+[lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"
+
+[lints.clippy]
+unwrap_used = "warn"
+needless_collect = "warn"

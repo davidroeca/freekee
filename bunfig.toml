@@ -1,0 +1,5 @@
+[install]
+exact = true
+# CI passes --frozen-lockfile explicitly; locally we let `bun add` update
+# bun.lock without complaint.
+frozenLockfile = false

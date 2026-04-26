@@ -1,0 +1,12 @@
+{
+  "name": "freekee",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "bun": ">=1.2.0"
+  },
+  "scripts": {
+    "tauri": "echo 'Tauri scaffolding lands in milestone 1' && exit 1"
+  },
+  "devDependencies": {}
+}

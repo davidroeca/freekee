@@ -1,0 +1,6 @@
+avoid-breaking-exported-api = false
+
+disallowed-methods = [
+  { path = "std::option::Option::unwrap", reason = "use ? or .expect(\"reason\")" },
+  { path = "std::result::Result::unwrap", reason = "use ? or .expect(\"reason\")" },
+]

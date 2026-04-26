@@ -7,28 +7,13 @@
 #![allow(clippy::disallowed_methods, clippy::unwrap_used)]
 
 use audit::AuditConfig;
-use keepass::config::InnerCipherConfig;
 
 mod common;
 use common::{db, strong_kdf};
 
 const STRONG_PASSPHRASE: &str = "qWk3@p9Lnv8Z2!Mrx7&fE$Bc1";
 
-// ─── A2: legacy-stream-cipher ─────────────────────────────────────────────
-
-#[test]
-#[ignore = "M1: A2 legacy-stream-cipher (Salsa20 inner stream cipher → MEDIUM)"]
-fn flags_salsa20_inner_cipher() {
-    let database = db(|cfg| {
-        cfg.inner_cipher_config = InnerCipherConfig::Salsa20;
-        cfg.kdf_config = strong_kdf();
-    });
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
-    assert!(
-        findings.iter().any(|f| f.rule == "legacy-stream-cipher"),
-        "expected legacy-stream-cipher finding for Salsa20",
-    );
-}
+// A2 (legacy-stream-cipher) is now implemented; tests live in rules.rs.
 
 // ─── A7: passphrase-only (informational) ──────────────────────────────────
 

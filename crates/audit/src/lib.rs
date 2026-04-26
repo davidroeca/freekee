@@ -97,6 +97,9 @@ pub fn run(db: &kdbx::Database, passphrase: &str, config: &AuditConfig) -> Vec<F
     if let Some(f) = rules::cipher::weak_outer_cipher(db) {
         findings.push(f);
     }
+    if let Some(f) = rules::cipher::legacy_stream_cipher(db) {
+        findings.push(f);
+    }
     if let Some(f) = rules::kdf::legacy_kdf(db) {
         findings.push(f);
     }

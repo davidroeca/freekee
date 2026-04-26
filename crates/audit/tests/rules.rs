@@ -4,7 +4,7 @@
 #![allow(clippy::disallowed_methods, clippy::unwrap_used)]
 
 use audit::{AuditConfig, Severity};
-use keepass::config::{DatabaseVersion, KdfConfig, OuterCipherConfig};
+use keepass::config::{DatabaseVersion, InnerCipherConfig, KdfConfig, OuterCipherConfig};
 
 mod common;
 use common::{db, strong_kdf};
@@ -51,6 +51,34 @@ fn does_not_flag_aes256_outer_cipher() {
     });
     let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
     assert!(!findings.iter().any(|f| f.rule == "weak-outer-cipher"));
+}
+
+// ─── A2: legacy-stream-cipher ─────────────────────────────────────────────
+
+#[test]
+fn flags_salsa20_inner_cipher() {
+    let database = db(|cfg| {
+        cfg.inner_cipher_config = InnerCipherConfig::Salsa20;
+        cfg.kdf_config = strong_kdf();
+    });
+    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let f = findings
+        .iter()
+        .find(|f| f.rule == "legacy-stream-cipher")
+        .expect("expected legacy-stream-cipher finding");
+    assert_eq!(f.severity, Severity::Medium);
+    assert!(!f.remediation.is_empty(), "remediation must be populated");
+    assert!(!f.citation.is_empty(), "citation must be populated");
+}
+
+#[test]
+fn does_not_flag_chacha20_inner_cipher() {
+    let database = db(|cfg| {
+        cfg.inner_cipher_config = InnerCipherConfig::ChaCha20;
+        cfg.kdf_config = strong_kdf();
+    });
+    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    assert!(!findings.iter().any(|f| f.rule == "legacy-stream-cipher"));
 }
 
 // ─── A3: legacy-kdf ───────────────────────────────────────────────────────

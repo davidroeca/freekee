@@ -8,7 +8,7 @@
 //! tracked for update in the doc-fixup PR.
 
 use crate::{Category, Finding, Severity};
-use kdbx::OuterCipher;
+use kdbx::{InnerCipher, OuterCipher};
 
 pub fn weak_outer_cipher(db: &kdbx::Database) -> Option<Finding> {
     match db.outer_cipher() {
@@ -24,5 +24,22 @@ pub fn weak_outer_cipher(db: &kdbx::Database) -> Option<Finding> {
             citation: "https://keepass.info/help/kb/kdbx_4.html",
             remediation: "freekee rotate cipher <path> --to chacha20".into(),
         }),
+    }
+}
+
+pub fn legacy_stream_cipher(db: &kdbx::Database) -> Option<Finding> {
+    match db.inner_cipher() {
+        InnerCipher::ChaCha20 => None,
+        InnerCipher::Salsa20 => Some(Finding {
+            rule: "legacy-stream-cipher",
+            severity: Severity::Medium,
+            category: Category::CipherFormat,
+            message: "Inner stream cipher is Salsa20, the legacy KDBX 3 default. KDBX 4 selects \
+                 ChaCha20 for new databases; Salsa20 is retained only for backward compatibility."
+                .into(),
+            citation: "https://keepass.info/help/kb/kdbx_4.html",
+            remediation: "freekee rotate cipher <path> --inner chacha20".into(),
+        }),
+        InnerCipher::Plain => None,
     }
 }

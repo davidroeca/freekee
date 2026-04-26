@@ -215,3 +215,6 @@ ehthumbs.db
 
 # Local clones of upstream deps for investigation. Never tracked.
 /vendor/
+
+# Living agent plan/checklist. Mutable working doc, not a deliverable.
+/PLAN.md

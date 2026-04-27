@@ -25,7 +25,7 @@ fn strong_database_yields_no_findings() {
     assert_eq!(findings, vec![], "no findings expected; got {findings:?}");
 }
 
-// ─── A1: weak-outer-cipher ────────────────────────────────────────────────
+// A1: weak-outer-cipher
 
 #[test]
 fn flags_twofish_outer_cipher() {
@@ -53,7 +53,7 @@ fn does_not_flag_aes256_outer_cipher() {
     assert!(!findings.iter().any(|f| f.rule == "weak-outer-cipher"));
 }
 
-// ─── A2: legacy-stream-cipher ─────────────────────────────────────────────
+// A2: legacy-stream-cipher
 
 #[test]
 fn flags_salsa20_inner_cipher() {
@@ -81,7 +81,7 @@ fn does_not_flag_chacha20_inner_cipher() {
     assert!(!findings.iter().any(|f| f.rule == "legacy-stream-cipher"));
 }
 
-// ─── A3: legacy-kdf ───────────────────────────────────────────────────────
+// A3: legacy-kdf
 
 #[test]
 fn flags_aes_kdf() {
@@ -106,7 +106,7 @@ fn does_not_flag_argon2id() {
     assert!(!findings.iter().any(|f| f.rule == "legacy-kdf"));
 }
 
-// ─── A4: weak-argon2-params ───────────────────────────────────────────────
+// A4: weak-argon2-params
 
 #[test]
 fn flags_weak_argon2_memory() {
@@ -169,7 +169,7 @@ fn does_not_flag_strong_argon2() {
     assert!(!findings.iter().any(|f| f.rule == "weak-argon2-params"));
 }
 
-// ─── A5: legacy-kdbx-version ──────────────────────────────────────────────
+// A5: legacy-kdbx-version
 
 #[test]
 fn flags_kdbx3_version() {
@@ -195,7 +195,7 @@ fn does_not_flag_kdbx4_version() {
     assert!(!findings.iter().any(|f| f.rule == "legacy-kdbx-version"));
 }
 
-// ─── A8: weak-entry-password ──────────────────────────────────────────────
+// A8: weak-entry-password
 
 #[test]
 fn flags_weak_entry_password() {
@@ -291,7 +291,7 @@ fn ignores_entry_with_no_password_field() {
     assert!(!findings.iter().any(|f| f.rule == "weak-entry-password"));
 }
 
-// ─── A9: reused-password ──────────────────────────────────────────────────
+// A9: reused-password
 
 #[test]
 fn flags_reused_password_across_two_entries() {
@@ -436,7 +436,7 @@ fn empty_passwords_are_not_treated_as_reuse() {
     assert!(!findings.iter().any(|f| f.rule == "reused-password"));
 }
 
-// ─── A10: stale-password ──────────────────────────────────────────────────
+// A10: stale-password
 
 #[test]
 fn flags_stale_password() {
@@ -524,7 +524,7 @@ fn does_not_flag_old_entry_with_no_password() {
     assert!(!findings.iter().any(|f| f.rule == "stale-password"));
 }
 
-// ─── A13: large-attachment ────────────────────────────────────────────────
+// A13: large-attachment
 
 #[test]
 fn flags_attachment_over_default_threshold() {
@@ -628,7 +628,7 @@ fn each_oversized_attachment_emits_its_own_finding() {
     assert_eq!(count, 2, "expected one finding per oversized attachment");
 }
 
-// ─── A11: expired-entry-overdue ───────────────────────────────────────────
+// A11: expired-entry-overdue
 
 #[test]
 fn flags_expired_entry_overdue() {
@@ -712,7 +712,7 @@ fn does_not_flag_entry_that_does_not_expire() {
     assert!(!findings.iter().any(|f| f.rule == "expired-entry-overdue"));
 }
 
-// ─── A6: weak-passphrase ──────────────────────────────────────────────────
+// A6: weak-passphrase
 
 #[test]
 fn flags_weak_passphrase() {

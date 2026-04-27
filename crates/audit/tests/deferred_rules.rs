@@ -13,12 +13,8 @@ use common::{db, strong_kdf};
 
 const STRONG_PASSPHRASE: &str = "qWk3@p9Lnv8Z2!Mrx7&fE$Bc1";
 
-// A2 (legacy-stream-cipher) is now implemented; tests live in rules.rs.
-
-// ─── A7: passphrase-only (informational) ──────────────────────────────────
-
 #[test]
-#[ignore = "M1: A7 passphrase-only — DB unlocked with passphrase only → INFO"]
+#[ignore = "passphrase-only: DB unlocked with passphrase only -> INFO"]
 fn flags_passphrase_only_composite_key() {
     let database = db(|cfg| cfg.kdf_config = strong_kdf());
     // Future: audit::run signature evolves to accept composite-key info
@@ -31,20 +27,10 @@ fn flags_passphrase_only_composite_key() {
     );
 }
 
-// A8 (weak-entry-password) is now implemented; tests live in rules.rs.
-
-// A9 (reused-password) is now implemented; tests live in rules.rs.
-
-// A10 (stale-password) is now implemented; tests live in rules.rs.
-
-// A11 (expired-entry-overdue) is now implemented; tests live in rules.rs.
-
-// A13 (large-attachment) is now implemented; tests live in rules.rs.
-
-// ─── A12: breached-password (HIBP) — DEFERRED beyond v0.1 ─────────────────
+// A12: breached-password (HIBP) — DEFERRED beyond v0.1
 
 #[test]
-#[ignore = "DEFERRED past v0.1: A12 breached-password requires network (HIBP k-anonymity)"]
+#[ignore = "DEFERRED past v0.1: breached-password requires network (HIBP k-anonymity)"]
 fn flags_breached_password() {
     let database = db(|cfg| cfg.kdf_config = strong_kdf());
     let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());

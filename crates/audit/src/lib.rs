@@ -116,6 +116,7 @@ pub fn run(db: &kdbx::Database, passphrase: &str, config: &AuditConfig) -> Vec<F
     findings.extend(rules::entries::reused_passwords(db));
     findings.extend(rules::entries::stale_passwords(db, config));
     findings.extend(rules::entries::expired_entries(db));
+    findings.extend(rules::entries::large_attachments(db, config));
 
     findings
 }

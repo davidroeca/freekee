@@ -8,6 +8,33 @@ use std::collections::BTreeMap;
 
 use crate::{AuditConfig, Category, Finding, Severity, strength};
 
+pub fn large_attachments(db: &kdbx::Database, config: &AuditConfig) -> Vec<Finding> {
+    let threshold = config.large_attachment_bytes;
+    let mut findings = Vec::new();
+    for entry in db.entries() {
+        let title = entry.title().unwrap_or("(untitled)");
+        for size in entry.attachment_sizes() {
+            if (size as u64) <= threshold {
+                continue;
+            }
+            findings.push(Finding {
+                rule: "large-attachment",
+                severity: Severity::Info,
+                category: Category::Attachments,
+                message: format!(
+                    "Entry `{title}` has an attachment of {} bytes; threshold is {} bytes.",
+                    size, threshold,
+                ),
+                citation: "https://keepass.info/help/base/entries.html",
+                remediation: format!(
+                    "freekee export attachment <path> --title {title:?}; then remove from the entry"
+                ),
+            });
+        }
+    }
+    findings
+}
+
 pub fn stale_passwords(db: &kdbx::Database, config: &AuditConfig) -> Vec<Finding> {
     let now = chrono::Utc::now().naive_utc();
     let threshold = chrono::Duration::days(config.stale_password_days);

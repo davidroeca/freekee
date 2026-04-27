@@ -221,4 +221,14 @@ impl Entry<'_> {
     pub fn url(&self) -> Option<&str> {
         self.inner.get(fields::URL)
     }
+
+    /// Expiration timestamp for this entry, or `None` if the entry is
+    /// not flagged to expire (i.e. KeePass `Times.Expires == False`).
+    /// KDBX timestamps are naive UTC at second precision.
+    pub fn expires_at(&self) -> Option<chrono::NaiveDateTime> {
+        if self.inner.times.expires != Some(true) {
+            return None;
+        }
+        self.inner.times.expiry
+    }
 }

@@ -815,6 +815,7 @@ dependencies = [
 name = "kdbx"
 version = "0.0.1"
 dependencies = [
+ "chrono",
  "keepass",
  "proptest",
  "serde",

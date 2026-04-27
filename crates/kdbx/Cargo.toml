@@ -12,6 +12,7 @@ publish = false
 keepass.workspace = true
 thiserror.workspace = true
 zeroize.workspace = true
+chrono.workspace = true
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 

@@ -231,4 +231,11 @@ impl Entry<'_> {
         }
         self.inner.times.expiry
     }
+
+    /// Time of the most recent modification recorded for this entry, or
+    /// `None` when the database does not record one. KDBX timestamps
+    /// are naive UTC at second precision.
+    pub fn last_modified_at(&self) -> Option<chrono::NaiveDateTime> {
+        self.inner.times.last_modification
+    }
 }

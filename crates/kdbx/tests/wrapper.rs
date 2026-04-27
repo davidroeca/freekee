@@ -130,3 +130,34 @@ fn expires_at_returns_none_when_expires_true_but_expiry_unset() {
     let entry = db.entries().next().unwrap();
     assert_eq!(entry.expires_at(), None);
 }
+
+// Entry::last_modified_at
+
+#[test]
+fn last_modified_at_returns_none_when_unset() {
+    let mut inner = keepass::Database::new();
+    {
+        let mut root = inner.root_mut();
+        let mut e = root.add_entry();
+        e.set_unprotected(keepass::db::fields::TITLE, "T");
+        e.times.last_modification = None;
+    }
+    let db = make(inner);
+    let entry = db.entries().next().unwrap();
+    assert_eq!(entry.last_modified_at(), None);
+}
+
+#[test]
+fn last_modified_at_returns_recorded_timestamp() {
+    let target = ts(2024, 3, 15);
+    let mut inner = keepass::Database::new();
+    {
+        let mut root = inner.root_mut();
+        let mut e = root.add_entry();
+        e.set_unprotected(keepass::db::fields::TITLE, "T");
+        e.times.last_modification = Some(target);
+    }
+    let db = make(inner);
+    let entry = db.entries().next().unwrap();
+    assert_eq!(entry.last_modified_at(), Some(target));
+}

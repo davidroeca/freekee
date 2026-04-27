@@ -8,6 +8,32 @@ use std::collections::BTreeMap;
 
 use crate::{AuditConfig, Category, Finding, Severity, strength};
 
+pub fn expired_entries(db: &kdbx::Database) -> Vec<Finding> {
+    let now = chrono::Utc::now().naive_utc();
+    let mut findings = Vec::new();
+    for entry in db.entries() {
+        let Some(expiry) = entry.expires_at() else {
+            continue;
+        };
+        if expiry >= now {
+            continue;
+        }
+        let title = entry.title().unwrap_or("(untitled)");
+        findings.push(Finding {
+            rule: "expired-entry-overdue",
+            severity: Severity::Low,
+            category: Category::Entries,
+            message: format!(
+                "Entry `{title}` expired on {} and has not been rotated or removed.",
+                expiry.format("%Y-%m-%d"),
+            ),
+            citation: "https://keepass.info/help/base/entries.html#expiry",
+            remediation: format!("freekee rotate entry <path> --title {title:?}"),
+        });
+    }
+    findings
+}
+
 pub fn reused_passwords(db: &kdbx::Database) -> Vec<Finding> {
     // Group entry titles by their password value. The password string
     // is used only as a `BTreeMap` key here and never copied into a

@@ -161,3 +161,38 @@ fn last_modified_at_returns_recorded_timestamp() {
     let entry = db.entries().next().unwrap();
     assert_eq!(entry.last_modified_at(), Some(target));
 }
+
+// Entry::attachment_sizes
+
+#[test]
+fn attachment_sizes_yields_nothing_when_entry_has_no_attachments() {
+    let mut inner = keepass::Database::new();
+    {
+        let mut root = inner.root_mut();
+        let mut e = root.add_entry();
+        e.set_unprotected(keepass::db::fields::TITLE, "T");
+    }
+    let db = make(inner);
+    let entry = db.entries().next().unwrap();
+    assert_eq!(entry.attachment_sizes().count(), 0);
+}
+
+#[test]
+fn attachment_sizes_returns_one_size_per_attachment() {
+    let mut inner = keepass::Database::new();
+    {
+        let mut root = inner.root_mut();
+        let mut e = root.add_entry();
+        e.set_unprotected(keepass::db::fields::TITLE, "T");
+        e.add_attachment("small.bin", keepass::db::Value::unprotected(vec![0u8; 16]));
+        e.add_attachment(
+            "large.bin",
+            keepass::db::Value::unprotected(vec![0u8; 4096]),
+        );
+    }
+    let db = make(inner);
+    let entry = db.entries().next().unwrap();
+    let mut sizes: Vec<_> = entry.attachment_sizes().collect();
+    sizes.sort_unstable();
+    assert_eq!(sizes, vec![16, 4096]);
+}

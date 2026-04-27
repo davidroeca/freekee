@@ -238,4 +238,11 @@ impl Entry<'_> {
     pub fn last_modified_at(&self) -> Option<chrono::NaiveDateTime> {
         self.inner.times.last_modification
     }
+
+    /// Sizes (in bytes) of every binary attachment referenced by this
+    /// entry. Names are not exposed here because the upstream public
+    /// API only iterates attachments by id, not by (name, data).
+    pub fn attachment_sizes(&self) -> impl Iterator<Item = usize> + '_ {
+        self.inner.attachments().map(|a| a.data.get().len())
+    }
 }

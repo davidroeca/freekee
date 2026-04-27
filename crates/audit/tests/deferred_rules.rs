@@ -39,18 +39,7 @@ fn flags_passphrase_only_composite_key() {
 
 // A11 (expired-entry-overdue) is now implemented; tests live in rules.rs.
 
-// ─── A13: large-attachment (informational) ────────────────────────────────
-
-#[test]
-#[ignore = "M1: A13 large-attachment (> large_attachment_bytes → INFO)"]
-fn flags_large_attachment() {
-    let database = db(|cfg| cfg.kdf_config = strong_kdf());
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
-    assert!(
-        findings.iter().any(|f| f.rule == "large-attachment"),
-        "expected large-attachment finding for attachment > 5 MiB",
-    );
-}
+// A13 (large-attachment) is now implemented; tests live in rules.rs.
 
 // ─── A12: breached-password (HIBP) — DEFERRED beyond v0.1 ─────────────────
 

@@ -524,6 +524,110 @@ fn does_not_flag_old_entry_with_no_password() {
     assert!(!findings.iter().any(|f| f.rule == "stale-password"));
 }
 
+// ─── A13: large-attachment ────────────────────────────────────────────────
+
+#[test]
+fn flags_attachment_over_default_threshold() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    {
+        let mut root = inner.root_mut();
+        let mut entry = root.add_entry();
+        entry.set_unprotected(keepass::db::fields::TITLE, "Photos");
+        // Default threshold is 5 MiB; 6 MiB must trip it.
+        entry.add_attachment(
+            "huge.bin",
+            keepass::db::Value::unprotected(vec![0u8; 6 * 1024 * 1024]),
+        );
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let f = findings
+        .iter()
+        .find(|f| f.rule == "large-attachment")
+        .expect("expected large-attachment finding for 6 MiB attachment");
+    assert_eq!(f.severity, audit::Severity::Info);
+    assert!(
+        f.message.contains("Photos"),
+        "finding should cite entry title; got: {}",
+        f.message,
+    );
+    assert!(!f.citation.is_empty(), "citation must be populated");
+}
+
+#[test]
+fn does_not_flag_attachment_under_threshold() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    {
+        let mut root = inner.root_mut();
+        let mut entry = root.add_entry();
+        entry.set_unprotected(keepass::db::fields::TITLE, "Doc");
+        entry.add_attachment(
+            "small.bin",
+            keepass::db::Value::unprotected(vec![0u8; 1024 * 1024]),
+        );
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    assert!(!findings.iter().any(|f| f.rule == "large-attachment"));
+}
+
+#[test]
+fn large_attachment_threshold_respects_config() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    {
+        let mut root = inner.root_mut();
+        let mut entry = root.add_entry();
+        entry.set_unprotected(keepass::db::fields::TITLE, "Doc");
+        entry.add_attachment(
+            "ish.bin",
+            keepass::db::Value::unprotected(vec![0u8; 2 * 1024 * 1024]),
+        );
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let config = AuditConfig {
+        large_attachment_bytes: 1024 * 1024, // 1 MiB
+        ..AuditConfig::default()
+    };
+    let findings = audit::run(&database, STRONG_PASSPHRASE, &config);
+    assert!(
+        findings.iter().any(|f| f.rule == "large-attachment"),
+        "lowering the threshold should make the 2 MiB attachment fire",
+    );
+}
+
+#[test]
+fn each_oversized_attachment_emits_its_own_finding() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    {
+        let mut root = inner.root_mut();
+        let mut entry = root.add_entry();
+        entry.set_unprotected(keepass::db::fields::TITLE, "Album");
+        entry.add_attachment(
+            "a.bin",
+            keepass::db::Value::unprotected(vec![0u8; 6 * 1024 * 1024]),
+        );
+        entry.add_attachment(
+            "b.bin",
+            keepass::db::Value::unprotected(vec![0u8; 7 * 1024 * 1024]),
+        );
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let count = findings
+        .iter()
+        .filter(|f| f.rule == "large-attachment")
+        .count();
+    assert_eq!(count, 2, "expected one finding per oversized attachment");
+}
+
 // ─── A11: expired-entry-overdue ───────────────────────────────────────────
 
 #[test]

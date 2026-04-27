@@ -33,34 +33,7 @@ fn flags_passphrase_only_composite_key() {
 
 // A8 (weak-entry-password) is now implemented; tests live in rules.rs.
 
-// ─── A9: reused-password ──────────────────────────────────────────────────
-
-#[test]
-#[ignore = "M1: A9 reused-password — same password across multiple entries → MEDIUM"]
-fn flags_reused_passwords() {
-    let mut inner = keepass::Database::new();
-    inner.config.kdf_config = strong_kdf();
-    {
-        let mut root = inner.root_mut();
-        let shared = "Shared-Password-2026";
-        let mut e1 = root.add_entry();
-        e1.set_unprotected(keepass::db::fields::TITLE, "A");
-        e1.set_protected(keepass::db::fields::PASSWORD, shared);
-    }
-    {
-        let mut root = inner.root_mut();
-        let mut e2 = root.add_entry();
-        e2.set_unprotected(keepass::db::fields::TITLE, "B");
-        e2.set_protected(keepass::db::fields::PASSWORD, "Shared-Password-2026");
-    }
-    let database = kdbx::Database::__from_keepass(inner);
-
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
-    assert!(
-        findings.iter().any(|f| f.rule == "reused-password"),
-        "expected reused-password finding when two entries share a password",
-    );
-}
+// A9 (reused-password) is now implemented; tests live in rules.rs.
 
 // ─── A10: stale-password ──────────────────────────────────────────────────
 

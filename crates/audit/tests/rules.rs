@@ -291,6 +291,151 @@ fn ignores_entry_with_no_password_field() {
     assert!(!findings.iter().any(|f| f.rule == "weak-entry-password"));
 }
 
+// ─── A9: reused-password ──────────────────────────────────────────────────
+
+#[test]
+fn flags_reused_password_across_two_entries() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    let shared = "Shared-Password-Of-Sufficient-Strength-2026";
+    {
+        let mut root = inner.root_mut();
+        let mut e1 = root.add_entry();
+        e1.set_unprotected(keepass::db::fields::TITLE, "Mail");
+        e1.set_protected(keepass::db::fields::PASSWORD, shared);
+    }
+    {
+        let mut root = inner.root_mut();
+        let mut e2 = root.add_entry();
+        e2.set_unprotected(keepass::db::fields::TITLE, "Calendar");
+        e2.set_protected(keepass::db::fields::PASSWORD, shared);
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let f = findings
+        .iter()
+        .find(|f| f.rule == "reused-password")
+        .expect("expected reused-password finding");
+    assert_eq!(f.severity, Severity::Medium);
+    assert!(
+        f.message.contains("Mail") && f.message.contains("Calendar"),
+        "finding should cite both entries; got: {}",
+        f.message,
+    );
+    assert!(
+        !f.message.contains(shared),
+        "reused password plaintext leaked into finding message: {}",
+        f.message,
+    );
+    assert!(
+        !f.remediation.contains(shared),
+        "reused password plaintext leaked into remediation: {}",
+        f.remediation,
+    );
+    assert!(!f.citation.is_empty(), "citation must be populated");
+}
+
+#[test]
+fn does_not_flag_unique_passwords() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    {
+        let mut root = inner.root_mut();
+        let mut e1 = root.add_entry();
+        e1.set_unprotected(keepass::db::fields::TITLE, "Mail");
+        e1.set_protected(
+            keepass::db::fields::PASSWORD,
+            "Unique-Password-One-2026!aA9",
+        );
+    }
+    {
+        let mut root = inner.root_mut();
+        let mut e2 = root.add_entry();
+        e2.set_unprotected(keepass::db::fields::TITLE, "Calendar");
+        e2.set_protected(
+            keepass::db::fields::PASSWORD,
+            "Unique-Password-Two-2026!bB8",
+        );
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    assert!(!findings.iter().any(|f| f.rule == "reused-password"));
+}
+
+#[test]
+fn reused_password_groups_three_or_more_entries_in_one_finding() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    let shared = "Triple-Reuse-Password-2026!Zz9";
+    for title in ["A", "B", "C"] {
+        let mut root = inner.root_mut();
+        let mut e = root.add_entry();
+        e.set_unprotected(keepass::db::fields::TITLE, title);
+        e.set_protected(keepass::db::fields::PASSWORD, shared);
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let reused: Vec<_> = findings
+        .iter()
+        .filter(|f| f.rule == "reused-password")
+        .collect();
+    assert_eq!(
+        reused.len(),
+        1,
+        "expected exactly one finding for one shared password (got {})",
+        reused.len(),
+    );
+    let msg = &reused[0].message;
+    assert!(msg.contains('A') && msg.contains('B') && msg.contains('C'));
+}
+
+#[test]
+fn reused_password_separates_findings_by_password() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    let pw_one = "First-Reused-Password-2026!Q1";
+    let pw_two = "Second-Reused-Password-2026!Q2";
+    for (title, pw) in [
+        ("Mail", pw_one),
+        ("Calendar", pw_one),
+        ("Bank", pw_two),
+        ("Broker", pw_two),
+    ] {
+        let mut root = inner.root_mut();
+        let mut e = root.add_entry();
+        e.set_unprotected(keepass::db::fields::TITLE, title);
+        e.set_protected(keepass::db::fields::PASSWORD, pw);
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let reused = findings
+        .iter()
+        .filter(|f| f.rule == "reused-password")
+        .count();
+    assert_eq!(reused, 2, "expected one finding per shared password");
+}
+
+#[test]
+fn empty_passwords_are_not_treated_as_reuse() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    for title in ["Note A", "Note B"] {
+        let mut root = inner.root_mut();
+        let mut e = root.add_entry();
+        e.set_unprotected(keepass::db::fields::TITLE, title);
+        // No password set on either; an empty/missing password is not
+        // a meaningful "shared secret".
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    assert!(!findings.iter().any(|f| f.rule == "reused-password"));
+}
+
 // ─── A6: weak-passphrase ──────────────────────────────────────────────────
 
 #[test]

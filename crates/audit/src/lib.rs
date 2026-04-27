@@ -113,6 +113,7 @@ pub fn run(db: &kdbx::Database, passphrase: &str, config: &AuditConfig) -> Vec<F
         findings.push(f);
     }
     findings.extend(rules::entries::weak_entry_passwords(db, config));
+    findings.extend(rules::entries::reused_passwords(db));
 
     findings
 }

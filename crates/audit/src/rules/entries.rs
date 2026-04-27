@@ -8,6 +8,42 @@ use std::collections::BTreeMap;
 
 use crate::{AuditConfig, Category, Finding, Severity, strength};
 
+pub fn stale_passwords(db: &kdbx::Database, config: &AuditConfig) -> Vec<Finding> {
+    let now = chrono::Utc::now().naive_utc();
+    let threshold = chrono::Duration::days(config.stale_password_days);
+    let mut findings = Vec::new();
+    for entry in db.entries() {
+        // Only meaningful for entries that actually hold a password.
+        let Some(password) = entry.password() else {
+            continue;
+        };
+        if password.is_empty() {
+            continue;
+        }
+        let Some(modified) = entry.last_modified_at() else {
+            continue;
+        };
+        let age = now.signed_duration_since(modified);
+        if age <= threshold {
+            continue;
+        }
+        let title = entry.title().unwrap_or("(untitled)");
+        findings.push(Finding {
+            rule: "stale-password",
+            severity: Severity::Low,
+            category: Category::Entries,
+            message: format!(
+                "Entry `{title}` was last updated {} days ago; threshold is {} days.",
+                age.num_days(),
+                config.stale_password_days,
+            ),
+            citation: "https://csrc.nist.gov/publications/detail/sp/800-63b/final",
+            remediation: format!("freekee rotate entry <path> --title {title:?}"),
+        });
+    }
+    findings
+}
+
 pub fn expired_entries(db: &kdbx::Database) -> Vec<Finding> {
     let now = chrono::Utc::now().naive_utc();
     let mut findings = Vec::new();

@@ -35,21 +35,7 @@ fn flags_passphrase_only_composite_key() {
 
 // A9 (reused-password) is now implemented; tests live in rules.rs.
 
-// ─── A10: stale-password ──────────────────────────────────────────────────
-
-#[test]
-#[ignore = "M1: A10 stale-password (last_modified > stale_password_days → LOW)"]
-fn flags_stale_password() {
-    // Implementation must reach into entry `times.last_modification_time`
-    // and compare against config.stale_password_days. Test will set an
-    // entry's modification time to ~400 days ago and assert the finding.
-    let database = db(|cfg| cfg.kdf_config = strong_kdf());
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
-    assert!(
-        findings.iter().any(|f| f.rule == "stale-password"),
-        "expected stale-password finding for entry > 180 days old",
-    );
-}
+// A10 (stale-password) is now implemented; tests live in rules.rs.
 
 // A11 (expired-entry-overdue) is now implemented; tests live in rules.rs.
 

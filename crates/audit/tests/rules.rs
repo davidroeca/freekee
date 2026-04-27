@@ -436,6 +436,94 @@ fn empty_passwords_are_not_treated_as_reuse() {
     assert!(!findings.iter().any(|f| f.rule == "reused-password"));
 }
 
+// ─── A10: stale-password ──────────────────────────────────────────────────
+
+#[test]
+fn flags_stale_password() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    let modified = chrono::Utc::now().naive_utc() - chrono::Duration::days(400);
+    {
+        let mut root = inner.root_mut();
+        let mut entry = root.add_entry();
+        entry.set_unprotected(keepass::db::fields::TITLE, "Bank");
+        entry.set_protected(
+            keepass::db::fields::PASSWORD,
+            "Strong-Stale-Password-2026!Aa9",
+        );
+        entry.times.last_modification = Some(modified);
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let f = findings
+        .iter()
+        .find(|f| f.rule == "stale-password")
+        .expect("expected stale-password finding for 400-day-old entry");
+    assert_eq!(f.severity, audit::Severity::Low);
+    assert!(
+        f.message.contains("Bank"),
+        "finding should cite entry title; got: {}",
+        f.message,
+    );
+    assert!(!f.citation.is_empty(), "citation must be populated");
+}
+
+#[test]
+fn does_not_flag_recently_modified_password() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    let modified = chrono::Utc::now().naive_utc() - chrono::Duration::days(30);
+    {
+        let mut root = inner.root_mut();
+        let mut entry = root.add_entry();
+        entry.set_unprotected(keepass::db::fields::TITLE, "Recent");
+        entry.set_protected(
+            keepass::db::fields::PASSWORD,
+            "Strong-Fresh-Password-2026!Aa9",
+        );
+        entry.times.last_modification = Some(modified);
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    assert!(!findings.iter().any(|f| f.rule == "stale-password"));
+}
+
+#[test]
+fn does_not_flag_entry_without_last_modification() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    {
+        let mut root = inner.root_mut();
+        let mut entry = root.add_entry();
+        entry.set_unprotected(keepass::db::fields::TITLE, "Unknown-Age");
+        entry.set_protected(keepass::db::fields::PASSWORD, "Strong-Password-2026!Aa9");
+        entry.times.last_modification = None;
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    assert!(!findings.iter().any(|f| f.rule == "stale-password"));
+}
+
+#[test]
+fn does_not_flag_old_entry_with_no_password() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    let modified = chrono::Utc::now().naive_utc() - chrono::Duration::days(400);
+    {
+        let mut root = inner.root_mut();
+        let mut entry = root.add_entry();
+        entry.set_unprotected(keepass::db::fields::TITLE, "Old Note");
+        entry.times.last_modification = Some(modified);
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    assert!(!findings.iter().any(|f| f.rule == "stale-password"));
+}
+
 // ─── A11: expired-entry-overdue ───────────────────────────────────────────
 
 #[test]

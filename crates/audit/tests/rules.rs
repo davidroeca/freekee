@@ -436,6 +436,90 @@ fn empty_passwords_are_not_treated_as_reuse() {
     assert!(!findings.iter().any(|f| f.rule == "reused-password"));
 }
 
+// ─── A11: expired-entry-overdue ───────────────────────────────────────────
+
+#[test]
+fn flags_expired_entry_overdue() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    {
+        let mut root = inner.root_mut();
+        let mut entry = root.add_entry();
+        entry.set_unprotected(keepass::db::fields::TITLE, "Old API Token");
+        entry.set_protected(
+            keepass::db::fields::PASSWORD,
+            "Some-Strong-Password-2026!Aa9",
+        );
+        entry.times.expires = Some(true);
+        entry.times.expiry = Some(
+            chrono::NaiveDate::from_ymd_opt(2020, 1, 1)
+                .unwrap()
+                .and_hms_opt(0, 0, 0)
+                .unwrap(),
+        );
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let f = findings
+        .iter()
+        .find(|f| f.rule == "expired-entry-overdue")
+        .expect("expected expired-entry-overdue finding for past expiry");
+    assert_eq!(f.severity, audit::Severity::Low);
+    assert!(
+        f.message.contains("Old API Token"),
+        "finding should cite entry title; got: {}",
+        f.message,
+    );
+    assert!(!f.citation.is_empty(), "citation must be populated");
+}
+
+#[test]
+fn does_not_flag_future_expiry() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    {
+        let mut root = inner.root_mut();
+        let mut entry = root.add_entry();
+        entry.set_unprotected(keepass::db::fields::TITLE, "Future Token");
+        entry.times.expires = Some(true);
+        entry.times.expiry = Some(
+            chrono::NaiveDate::from_ymd_opt(2999, 1, 1)
+                .unwrap()
+                .and_hms_opt(0, 0, 0)
+                .unwrap(),
+        );
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    assert!(!findings.iter().any(|f| f.rule == "expired-entry-overdue"));
+}
+
+#[test]
+fn does_not_flag_entry_that_does_not_expire() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    {
+        let mut root = inner.root_mut();
+        let mut entry = root.add_entry();
+        entry.set_unprotected(keepass::db::fields::TITLE, "Permanent");
+        entry.times.expires = Some(false);
+        // expiry timestamp set but `expires == false` means the user
+        // does not want this entry treated as expirable.
+        entry.times.expiry = Some(
+            chrono::NaiveDate::from_ymd_opt(2020, 1, 1)
+                .unwrap()
+                .and_hms_opt(0, 0, 0)
+                .unwrap(),
+        );
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    assert!(!findings.iter().any(|f| f.rule == "expired-entry-overdue"));
+}
+
 // ─── A6: weak-passphrase ──────────────────────────────────────────────────
 
 #[test]

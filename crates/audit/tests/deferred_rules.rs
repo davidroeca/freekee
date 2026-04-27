@@ -51,18 +51,7 @@ fn flags_stale_password() {
     );
 }
 
-// ─── A11: expired-entry-overdue ───────────────────────────────────────────
-
-#[test]
-#[ignore = "M1: A11 expired-entry-overdue — entry.expires in the past → LOW"]
-fn flags_expired_entry() {
-    let database = db(|cfg| cfg.kdf_config = strong_kdf());
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
-    assert!(
-        findings.iter().any(|f| f.rule == "expired-entry-overdue"),
-        "expected expired-entry-overdue finding when entry expiry is in the past",
-    );
-}
+// A11 (expired-entry-overdue) is now implemented; tests live in rules.rs.
 
 // ─── A13: large-attachment (informational) ────────────────────────────────
 

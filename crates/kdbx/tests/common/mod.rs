@@ -28,8 +28,8 @@ pub fn assert_self_roundtrip(fixture: &str) {
     let path = fixture_dir(fixture).join("db.kdbx");
     let password = fixture_password(fixture);
 
-    let original =
-        kdbx::Database::open(&path, &password, None).unwrap_or_else(|e| panic!("open {fixture}: {e}"));
+    let original = kdbx::Database::open(&path, &password, None)
+        .unwrap_or_else(|e| panic!("open {fixture}: {e}"));
     let tempdir = tempfile::tempdir().expect("tempdir");
     let out_path = tempdir.path().join(format!("{fixture}-roundtrip.kdbx"));
     original
@@ -49,8 +49,8 @@ pub fn assert_roundtrip_idempotent(fixture: &str) {
     let password = fixture_password(fixture);
     let tempdir = tempfile::tempdir().expect("tempdir");
 
-    let original =
-        kdbx::Database::open(&path, &password, None).unwrap_or_else(|e| panic!("open {fixture}: {e}"));
+    let original = kdbx::Database::open(&path, &password, None)
+        .unwrap_or_else(|e| panic!("open {fixture}: {e}"));
 
     let once_path = tempdir.path().join(format!("{fixture}-rt1.kdbx"));
     original
@@ -111,8 +111,8 @@ pub fn assert_keepassxc_can_open(fixture: &str) {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let out_path = tempdir.path().join(format!("{fixture}-for-keepassxc.kdbx"));
 
-    let original =
-        kdbx::Database::open(&src, &password, None).unwrap_or_else(|e| panic!("open {fixture}: {e}"));
+    let original = kdbx::Database::open(&src, &password, None)
+        .unwrap_or_else(|e| panic!("open {fixture}: {e}"));
     original
         .save(&out_path, &password)
         .unwrap_or_else(|e| panic!("save {fixture}: {e}"));

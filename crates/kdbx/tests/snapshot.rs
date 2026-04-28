@@ -74,10 +74,13 @@ fn with_keyfile_matches_committed_snapshot() {
         .expect("open with-keyfile fixture");
     let actual = kdbx::snapshot::expected_snapshot(&db);
 
-    let raw = fs::read_to_string(dir.join("expected.json"))
-        .expect("read expected.json for with-keyfile");
+    let raw =
+        fs::read_to_string(dir.join("expected.json")).expect("read expected.json for with-keyfile");
     let expected: serde_json::Value =
         serde_json::from_str(&raw).expect("parse expected.json for with-keyfile");
 
-    assert_eq!(actual, expected, "snapshot drift for fixture `with-keyfile`");
+    assert_eq!(
+        actual, expected,
+        "snapshot drift for fixture `with-keyfile`"
+    );
 }

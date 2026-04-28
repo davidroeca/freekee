@@ -1,0 +1,12 @@
+{
+  "kdbx_version": "kdb4.1",
+  "kdf": {
+    "iterations": 69,
+    "memory_bytes": 67108864,
+    "parallelism": 4,
+    "type": "argon2d"
+  },
+  "outer_cipher": "aes-256",
+  "root_entry_count": 2,
+  "root_subgroup_count": 1
+}

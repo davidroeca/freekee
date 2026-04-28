@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use ::audit::{AuditConfig, Finding, Severity};
+use ::audit::{AuditConfig, CompositeKeyInfo, Finding, Severity};
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -19,7 +19,15 @@ pub struct Args {
 pub fn run(args: Args) -> anyhow::Result<ExitCode> {
     let pass = super::read_passphrase(args.pass_stdin)?;
     let db = kdbx::Database::open(&args.path, &pass)?;
-    let findings = ::audit::run(&db, &pass, &AuditConfig::default());
+    // The CLI today opens databases with a passphrase only (no
+    // --keyfile flag yet). This will need to change when we wire
+    // additional factors through `kdbx::Database::open`.
+    let findings = ::audit::run(
+        &db,
+        &pass,
+        CompositeKeyInfo::PassphraseOnly,
+        &AuditConfig::default(),
+    );
 
     if args.json {
         let buf = serde_json::to_string_pretty(&findings)?;

@@ -1,0 +1,10 @@
+{
+  "kdbx_version": "kdb3.1",
+  "kdf": {
+    "rounds": 21897810,
+    "type": "aes-kdf"
+  },
+  "outer_cipher": "aes-256",
+  "root_entry_count": 1,
+  "root_subgroup_count": 0
+}

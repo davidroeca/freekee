@@ -68,7 +68,10 @@ fn verify_on_clean_fixture_exits_zero() {
 }
 
 #[test]
-fn audit_on_empty_fixture_yields_no_findings() {
+fn audit_on_empty_fixture_surfaces_only_passphrase_only_info() {
+    // The CLI opens databases with a passphrase only today, so A7
+    // (passphrase-only) always fires INFO. A clean fixture must not
+    // surface anything else.
     let path = fixtures("empty").join("db.kdbx");
     freekee()
         .arg("audit")
@@ -77,7 +80,8 @@ fn audit_on_empty_fixture_yields_no_findings() {
         .write_stdin(format!("{FIXTURE_PASSWORD}\n"))
         .assert()
         .success()
-        .stdout(contains("no findings").or(contains("0 finding")));
+        .stdout(contains("passphrase-only"))
+        .stdout(contains("1 finding"));
 }
 
 #[test]

@@ -45,10 +45,7 @@ jobs:
           sudo apt-get install -y keepassxc
           keepassxc-cli --version
       - run: cargo test --workspace --locked
-      # Compile (but do not run) the keepassxc-verify gated tests. They
-      # are currently `#[ignore]` due to an upstream serializer bug;
-      # see docs/kdbx-compat-matrix.md `Known upstream gaps` #2.
-      - run: cargo build --tests -p kdbx --features keepassxc-verify --locked
+      - run: cargo test -p kdbx --test roundtrip --features keepassxc-verify --locked
 
   audit:
     runs-on: ubuntu-24.04

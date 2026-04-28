@@ -61,7 +61,7 @@ fn roundtrip_single_entry_preserves_fields() {
 }
 
 #[test]
-#[ignore = "keepass-rs 0.12.0 does not parse <PreviousParentGroup> (KDBX 4.1); see docs/kdbx-compat-matrix.md"]
+#[ignore = "keepass-rs does not yet parse <PreviousParentGroup> (KDBX 4.1); see docs/kdbx-compat-matrix.md and upstream PR #308"]
 fn roundtrip_groups_and_entries_preserves_hierarchy() {
     assert_self_roundtrip("groups-and-entries");
 }
@@ -101,49 +101,38 @@ fn roundtrip_is_idempotent_for_kdbx41_features() {
     assert_roundtrip_idempotent("kdbx41-features");
 }
 
-// keepassxc-verify tests pass against a locally-patched `keepass-rs`
-// (see docs/kdbx-compat-matrix.md "Known upstream gaps" #2). Until the
-// upstream fix lands, they remain `#[ignore]` so default CI stays
-// green; un-ignore once the dep is bumped past the published fix.
-
 #[cfg(feature = "keepassxc-verify")]
 #[test]
-#[ignore = "blocked on upstream keepass-rs PR; patch verified locally"]
 fn keepassxc_can_open_written_empty() {
     common::assert_keepassxc_can_open("empty");
 }
 
 #[cfg(feature = "keepassxc-verify")]
 #[test]
-#[ignore = "blocked on upstream keepass-rs PR; patch verified locally"]
 fn keepassxc_can_open_written_single_entry() {
     common::assert_keepassxc_can_open("single-entry");
 }
 
 #[cfg(feature = "keepassxc-verify")]
 #[test]
-#[ignore = "blocked on upstream keepass-rs PR; patch verified locally"]
 fn keepassxc_can_open_written_with_history() {
     common::assert_keepassxc_can_open("with-history");
 }
 
 #[cfg(feature = "keepassxc-verify")]
 #[test]
-#[ignore = "blocked on upstream keepass-rs PR; patch verified locally"]
 fn keepassxc_can_open_written_with_attachments() {
     common::assert_keepassxc_can_open("with-attachments");
 }
 
 #[cfg(feature = "keepassxc-verify")]
 #[test]
-#[ignore = "blocked on upstream keepass-rs PR; patch verified locally"]
 fn keepassxc_can_open_written_with_custom_data() {
     common::assert_keepassxc_can_open("with-custom-data");
 }
 
 #[cfg(feature = "keepassxc-verify")]
 #[test]
-#[ignore = "blocked on upstream keepass-rs PR; patch verified locally"]
 fn keepassxc_can_open_written_kdbx41_features() {
     common::assert_keepassxc_can_open("kdbx41-features");
 }

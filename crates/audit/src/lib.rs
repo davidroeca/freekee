@@ -89,9 +89,32 @@ impl Default for AuditConfig {
     }
 }
 
+/// What the caller can tell us about the composite key used to unlock
+/// the database. Some rules (currently A7 `passphrase-only`) need this
+/// information because it is not stored in the parsed `Database`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum CompositeKeyInfo {
+    /// The caller did not track which factors made up the composite
+    /// key. A7 stays silent.
+    #[default]
+    Untracked,
+    /// The caller knows the composite key contained no extra factor
+    /// beyond the passphrase: no keyfile, no challenge-response, etc.
+    /// A7 fires INFO.
+    PassphraseOnly,
+    /// At least one factor beyond the passphrase was present (keyfile,
+    /// challenge-response, ...). A7 stays silent.
+    HasExtraFactor,
+}
+
 /// Run every enabled rule against the database and return findings in
 /// rule order.
-pub fn run(db: &kdbx::Database, passphrase: &str, config: &AuditConfig) -> Vec<Finding> {
+pub fn run(
+    db: &kdbx::Database,
+    passphrase: &str,
+    composite_key: CompositeKeyInfo,
+    config: &AuditConfig,
+) -> Vec<Finding> {
     let mut findings = Vec::new();
 
     if let Some(f) = rules::cipher::weak_outer_cipher(db) {
@@ -110,6 +133,9 @@ pub fn run(db: &kdbx::Database, passphrase: &str, config: &AuditConfig) -> Vec<F
         findings.push(f);
     }
     if let Some(f) = rules::passphrase::weak_passphrase(passphrase, config) {
+        findings.push(f);
+    }
+    if let Some(f) = rules::passphrase::passphrase_only(composite_key) {
         findings.push(f);
     }
     findings.extend(rules::entries::weak_entry_passwords(db, config));

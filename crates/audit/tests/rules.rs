@@ -3,7 +3,7 @@
 
 #![allow(clippy::disallowed_methods, clippy::unwrap_used)]
 
-use audit::{AuditConfig, Severity};
+use audit::{AuditConfig, CompositeKeyInfo, Severity};
 use keepass::config::{DatabaseVersion, InnerCipherConfig, KdfConfig, OuterCipherConfig};
 
 mod common;
@@ -21,7 +21,12 @@ fn strong_database_yields_no_findings() {
         cfg.outer_cipher_config = OuterCipherConfig::ChaCha20;
         cfg.kdf_config = strong_kdf();
     });
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     assert_eq!(findings, vec![], "no findings expected; got {findings:?}");
 }
 
@@ -33,7 +38,12 @@ fn flags_twofish_outer_cipher() {
         cfg.outer_cipher_config = OuterCipherConfig::Twofish;
         cfg.kdf_config = strong_kdf();
     });
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     let f = findings
         .iter()
         .find(|f| f.rule == "weak-outer-cipher")
@@ -49,7 +59,12 @@ fn does_not_flag_aes256_outer_cipher() {
         cfg.outer_cipher_config = OuterCipherConfig::AES256;
         cfg.kdf_config = strong_kdf();
     });
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     assert!(!findings.iter().any(|f| f.rule == "weak-outer-cipher"));
 }
 
@@ -61,7 +76,12 @@ fn flags_salsa20_inner_cipher() {
         cfg.inner_cipher_config = InnerCipherConfig::Salsa20;
         cfg.kdf_config = strong_kdf();
     });
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     let f = findings
         .iter()
         .find(|f| f.rule == "legacy-stream-cipher")
@@ -77,7 +97,12 @@ fn does_not_flag_chacha20_inner_cipher() {
         cfg.inner_cipher_config = InnerCipherConfig::ChaCha20;
         cfg.kdf_config = strong_kdf();
     });
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     assert!(!findings.iter().any(|f| f.rule == "legacy-stream-cipher"));
 }
 
@@ -88,7 +113,12 @@ fn flags_aes_kdf() {
     let database = db(|cfg| {
         cfg.kdf_config = KdfConfig::Aes { rounds: 100_000 };
     });
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     let f = findings
         .iter()
         .find(|f| f.rule == "legacy-kdf")
@@ -102,7 +132,12 @@ fn does_not_flag_argon2id() {
     let database = db(|cfg| {
         cfg.kdf_config = strong_kdf();
     });
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     assert!(!findings.iter().any(|f| f.rule == "legacy-kdf"));
 }
 
@@ -118,7 +153,12 @@ fn flags_weak_argon2_memory() {
             version: argon2::Version::Version13,
         };
     });
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     let f = findings
         .iter()
         .find(|f| f.rule == "weak-argon2-params")
@@ -136,7 +176,12 @@ fn flags_weak_argon2_iterations() {
             version: argon2::Version::Version13,
         };
     });
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     let f = findings
         .iter()
         .find(|f| f.rule == "weak-argon2-params")
@@ -154,7 +199,12 @@ fn flags_weak_argon2_parallelism() {
             version: argon2::Version::Version13,
         };
     });
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     let f = findings
         .iter()
         .find(|f| f.rule == "weak-argon2-params")
@@ -165,7 +215,12 @@ fn flags_weak_argon2_parallelism() {
 #[test]
 fn does_not_flag_strong_argon2() {
     let database = db(|cfg| cfg.kdf_config = strong_kdf());
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     assert!(!findings.iter().any(|f| f.rule == "weak-argon2-params"));
 }
 
@@ -177,7 +232,12 @@ fn flags_kdbx3_version() {
         cfg.version = DatabaseVersion::KDB3(1);
         cfg.kdf_config = strong_kdf();
     });
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     let f = findings
         .iter()
         .find(|f| f.rule == "legacy-kdbx-version")
@@ -191,7 +251,12 @@ fn does_not_flag_kdbx4_version() {
         cfg.version = DatabaseVersion::KDB4(1);
         cfg.kdf_config = strong_kdf();
     });
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     assert!(!findings.iter().any(|f| f.rule == "legacy-kdbx-version"));
 }
 
@@ -210,7 +275,12 @@ fn flags_weak_entry_password() {
     }
     let database = kdbx::Database::__from_keepass(inner);
 
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     let f = findings
         .iter()
         .find(|f| f.rule == "weak-entry-password")
@@ -247,7 +317,12 @@ fn does_not_flag_strong_entry_password() {
     }
     let database = kdbx::Database::__from_keepass(inner);
 
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     assert!(!findings.iter().any(|f| f.rule == "weak-entry-password"));
 }
 
@@ -266,7 +341,12 @@ fn weak_entry_password_walks_nested_groups() {
     }
     let database = kdbx::Database::__from_keepass(inner);
 
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     let f = findings
         .iter()
         .find(|f| f.rule == "weak-entry-password")
@@ -287,7 +367,12 @@ fn ignores_entry_with_no_password_field() {
     }
     let database = kdbx::Database::__from_keepass(inner);
 
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     assert!(!findings.iter().any(|f| f.rule == "weak-entry-password"));
 }
 
@@ -312,7 +397,12 @@ fn flags_reused_password_across_two_entries() {
     }
     let database = kdbx::Database::__from_keepass(inner);
 
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     let f = findings
         .iter()
         .find(|f| f.rule == "reused-password")
@@ -360,7 +450,12 @@ fn does_not_flag_unique_passwords() {
     }
     let database = kdbx::Database::__from_keepass(inner);
 
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     assert!(!findings.iter().any(|f| f.rule == "reused-password"));
 }
 
@@ -377,7 +472,12 @@ fn reused_password_groups_three_or_more_entries_in_one_finding() {
     }
     let database = kdbx::Database::__from_keepass(inner);
 
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     let reused: Vec<_> = findings
         .iter()
         .filter(|f| f.rule == "reused-password")
@@ -411,7 +511,12 @@ fn reused_password_separates_findings_by_password() {
     }
     let database = kdbx::Database::__from_keepass(inner);
 
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     let reused = findings
         .iter()
         .filter(|f| f.rule == "reused-password")
@@ -432,7 +537,12 @@ fn empty_passwords_are_not_treated_as_reuse() {
     }
     let database = kdbx::Database::__from_keepass(inner);
 
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     assert!(!findings.iter().any(|f| f.rule == "reused-password"));
 }
 
@@ -455,7 +565,12 @@ fn flags_stale_password() {
     }
     let database = kdbx::Database::__from_keepass(inner);
 
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     let f = findings
         .iter()
         .find(|f| f.rule == "stale-password")
@@ -486,7 +601,12 @@ fn does_not_flag_recently_modified_password() {
     }
     let database = kdbx::Database::__from_keepass(inner);
 
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     assert!(!findings.iter().any(|f| f.rule == "stale-password"));
 }
 
@@ -503,7 +623,12 @@ fn does_not_flag_entry_without_last_modification() {
     }
     let database = kdbx::Database::__from_keepass(inner);
 
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     assert!(!findings.iter().any(|f| f.rule == "stale-password"));
 }
 
@@ -520,7 +645,12 @@ fn does_not_flag_old_entry_with_no_password() {
     }
     let database = kdbx::Database::__from_keepass(inner);
 
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     assert!(!findings.iter().any(|f| f.rule == "stale-password"));
 }
 
@@ -542,7 +672,12 @@ fn flags_attachment_over_default_threshold() {
     }
     let database = kdbx::Database::__from_keepass(inner);
 
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     let f = findings
         .iter()
         .find(|f| f.rule == "large-attachment")
@@ -571,7 +706,12 @@ fn does_not_flag_attachment_under_threshold() {
     }
     let database = kdbx::Database::__from_keepass(inner);
 
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     assert!(!findings.iter().any(|f| f.rule == "large-attachment"));
 }
 
@@ -594,7 +734,12 @@ fn large_attachment_threshold_respects_config() {
         large_attachment_bytes: 1024 * 1024, // 1 MiB
         ..AuditConfig::default()
     };
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &config);
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &config,
+    );
     assert!(
         findings.iter().any(|f| f.rule == "large-attachment"),
         "lowering the threshold should make the 2 MiB attachment fire",
@@ -620,7 +765,12 @@ fn each_oversized_attachment_emits_its_own_finding() {
     }
     let database = kdbx::Database::__from_keepass(inner);
 
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     let count = findings
         .iter()
         .filter(|f| f.rule == "large-attachment")
@@ -652,7 +802,12 @@ fn flags_expired_entry_overdue() {
     }
     let database = kdbx::Database::__from_keepass(inner);
 
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     let f = findings
         .iter()
         .find(|f| f.rule == "expired-entry-overdue")
@@ -684,7 +839,12 @@ fn does_not_flag_future_expiry() {
     }
     let database = kdbx::Database::__from_keepass(inner);
 
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     assert!(!findings.iter().any(|f| f.rule == "expired-entry-overdue"));
 }
 
@@ -708,8 +868,57 @@ fn does_not_flag_entry_that_does_not_expire() {
     }
     let database = kdbx::Database::__from_keepass(inner);
 
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     assert!(!findings.iter().any(|f| f.rule == "expired-entry-overdue"));
+}
+
+// A7: passphrase-only
+
+#[test]
+fn flags_passphrase_only_composite_key() {
+    let database = db(|cfg| cfg.kdf_config = strong_kdf());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::PassphraseOnly,
+        &AuditConfig::default(),
+    );
+    let f = findings
+        .iter()
+        .find(|f| f.rule == "passphrase-only")
+        .expect("expected passphrase-only finding");
+    assert_eq!(f.severity, Severity::Info);
+    assert!(!f.remediation.is_empty(), "remediation must be populated");
+    assert!(!f.citation.is_empty(), "citation must be populated");
+}
+
+#[test]
+fn does_not_flag_passphrase_only_when_extra_factor_present() {
+    let database = db(|cfg| cfg.kdf_config = strong_kdf());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::HasExtraFactor,
+        &AuditConfig::default(),
+    );
+    assert!(!findings.iter().any(|f| f.rule == "passphrase-only"));
+}
+
+#[test]
+fn does_not_flag_passphrase_only_when_composite_key_untracked() {
+    let database = db(|cfg| cfg.kdf_config = strong_kdf());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
+    assert!(!findings.iter().any(|f| f.rule == "passphrase-only"));
 }
 
 // A6: weak-passphrase
@@ -717,7 +926,12 @@ fn does_not_flag_entry_that_does_not_expire() {
 #[test]
 fn flags_weak_passphrase() {
     let database = db(|cfg| cfg.kdf_config = strong_kdf());
-    let findings = audit::run(&database, WEAK_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        WEAK_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     let f = findings
         .iter()
         .find(|f| f.rule == "weak-passphrase")
@@ -739,7 +953,12 @@ fn flags_weak_passphrase() {
 #[test]
 fn does_not_flag_strong_passphrase() {
     let database = db(|cfg| cfg.kdf_config = strong_kdf());
-    let findings = audit::run(&database, STRONG_PASSPHRASE, &AuditConfig::default());
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
     assert!(!findings.iter().any(|f| f.rule == "weak-passphrase"));
 }
 

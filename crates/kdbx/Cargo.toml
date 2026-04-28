@@ -13,8 +13,8 @@ keepass.workspace = true
 thiserror.workspace = true
 zeroize.workspace = true
 chrono.workspace = true
-serde = { workspace = true, optional = true }
-serde_json = { workspace = true, optional = true }
+serde.workspace = true
+serde_json.workspace = true
 
 [[bin]]
 name = "dump-expected"
@@ -31,8 +31,8 @@ serde_json.workspace = true
 default = []
 # Gates the post-write `keepassxc-cli` re-read step. CI on; local off (slow).
 keepassxc-verify = []
-# Builds the `dump-expected` helper binary.
-dump-expected = ["dep:serde", "dep:serde_json"]
+# Gates the `dump-expected` helper binary.
+dump-expected = []
 
 [lints]
 workspace = true

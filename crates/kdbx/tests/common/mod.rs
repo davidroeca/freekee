@@ -71,6 +71,33 @@ pub fn assert_roundtrip_idempotent(fixture: &str) {
     );
 }
 
+/// Compare the committed `expected.json` next to a fixture against a
+/// freshly-computed snapshot. Catches version, cipher, and KDF drift
+/// that the structural-equality round-trip does not surface.
+pub fn assert_expected_snapshot_matches(fixture: &str) {
+    let dir = fixture_dir(fixture);
+    let kdbx_path = dir.join("db.kdbx");
+    let expected_path = dir.join("expected.json");
+    let password = fixture_password(fixture);
+
+    let db = kdbx::Database::open(&kdbx_path, &password)
+        .unwrap_or_else(|e| panic!("open {fixture}: {e}"));
+    let actual = kdbx::snapshot::expected_snapshot(&db);
+
+    let raw = fs::read_to_string(&expected_path)
+        .unwrap_or_else(|e| panic!("read expected.json for {fixture}: {e}"));
+    let expected: serde_json::Value = serde_json::from_str(&raw)
+        .unwrap_or_else(|e| panic!("parse expected.json for {fixture}: {e}"));
+
+    assert_eq!(
+        actual,
+        expected,
+        "snapshot drift for fixture `{fixture}`: regenerate with `cargo run -p kdbx --features dump-expected --bin dump-expected -- {} < {}`",
+        kdbx_path.display(),
+        dir.join("password.txt").display(),
+    );
+}
+
 /// Shell out to `keepassxc-cli db-info` to verify a file we wrote can be
 /// re-opened by the canonical KeePass implementation. Gated on the
 /// `keepassxc-verify` feature; requires `keepassxc-cli` 2.7+ on PATH.

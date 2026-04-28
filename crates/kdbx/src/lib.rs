@@ -5,6 +5,7 @@
 //! milestone-0 TDD plan.
 
 mod error;
+pub mod snapshot;
 
 pub use error::{Error, Result};
 

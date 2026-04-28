@@ -7,6 +7,9 @@ use kdbx::{KdbxVersion, Kdf, OuterCipher};
 pub struct Args {
     /// Path to the .kdbx file.
     pub path: PathBuf,
+    /// Path to a keyfile (in addition to the passphrase).
+    #[arg(long)]
+    pub keyfile: Option<PathBuf>,
     /// Read passphrase from the first line of stdin.
     #[arg(long)]
     pub pass_stdin: bool,
@@ -14,7 +17,7 @@ pub struct Args {
 
 pub fn run(args: Args) -> anyhow::Result<ExitCode> {
     let pass = super::read_passphrase(args.pass_stdin)?;
-    let db = kdbx::Database::open(&args.path, &pass)?;
+    let db = kdbx::Database::open(&args.path, &pass, args.keyfile.as_deref())?;
 
     let version = match db.kdbx_version() {
         KdbxVersion::Kdb1 => "KDBX 1".to_string(),

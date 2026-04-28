@@ -112,6 +112,36 @@ fn audit_on_kdbx3_legacy_with_strict_exits_nonzero() {
 }
 
 #[test]
+fn verify_with_keyfile_succeeds() {
+    let dir = fixtures("with-keyfile");
+    freekee()
+        .arg("verify")
+        .arg(dir.join("db.kdbx"))
+        .arg("--keyfile")
+        .arg(dir.join("keyfile.bin"))
+        .arg("--pass-stdin")
+        .write_stdin(format!("{FIXTURE_PASSWORD}\n"))
+        .assert()
+        .success()
+        .stdout(contains("OK"));
+}
+
+#[test]
+fn audit_with_keyfile_suppresses_passphrase_only_finding() {
+    let dir = fixtures("with-keyfile");
+    freekee()
+        .arg("audit")
+        .arg(dir.join("db.kdbx"))
+        .arg("--keyfile")
+        .arg(dir.join("keyfile.bin"))
+        .arg("--pass-stdin")
+        .write_stdin(format!("{FIXTURE_PASSWORD}\n"))
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("passphrase-only").not());
+}
+
+#[test]
 fn audit_with_json_outputs_machine_readable() {
     let path = fixtures("empty").join("db.kdbx");
     freekee()

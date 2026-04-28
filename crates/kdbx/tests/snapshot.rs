@@ -62,3 +62,22 @@ fn kdbx40_legacy_matches_committed_snapshot() {
 fn kdbx3_legacy_matches_committed_snapshot() {
     assert_expected_snapshot_matches("kdbx3-legacy");
 }
+
+#[test]
+fn with_keyfile_matches_committed_snapshot() {
+    use std::fs;
+    let dir = common::fixture_dir("with-keyfile");
+    let password = common::fixture_password("with-keyfile");
+    let keyfile = dir.join("keyfile.bin");
+
+    let db = kdbx::Database::open(&dir.join("db.kdbx"), &password, Some(&keyfile))
+        .expect("open with-keyfile fixture");
+    let actual = kdbx::snapshot::expected_snapshot(&db);
+
+    let raw = fs::read_to_string(dir.join("expected.json"))
+        .expect("read expected.json for with-keyfile");
+    let expected: serde_json::Value =
+        serde_json::from_str(&raw).expect("parse expected.json for with-keyfile");
+
+    assert_eq!(actual, expected, "snapshot drift for fixture `with-keyfile`");
+}

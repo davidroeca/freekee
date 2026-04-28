@@ -13,7 +13,7 @@ fn read_kdbx40_legacy_reports_v4_version() {
     let path = fixture_dir("kdbx40-legacy").join("db.kdbx");
     let password = fixture_password("kdbx40-legacy");
 
-    let db = kdbx::Database::open(&path, &password).expect("open kdbx40-legacy");
+    let db = kdbx::Database::open(&path, &password, None).expect("open kdbx40-legacy");
 
     let v = db.kdbx_version();
     assert_eq!(v.major(), 4, "kdbx40-legacy must report major version 4");
@@ -30,7 +30,7 @@ fn read_kdbx3_legacy_reports_v3_version() {
     let path = fixture_dir("kdbx3-legacy").join("db.kdbx");
     let password = fixture_password("kdbx3-legacy");
 
-    let db = kdbx::Database::open(&path, &password).expect("open kdbx3-legacy");
+    let db = kdbx::Database::open(&path, &password, None).expect("open kdbx3-legacy");
 
     assert_eq!(db.kdbx_version().major(), 3);
 }
@@ -46,7 +46,7 @@ fn corrupted_header_returns_format_error() {
     )
     .unwrap();
 
-    let err = kdbx::Database::open(&path, "anything").expect_err("must reject");
+    let err = kdbx::Database::open(&path, "anything", None).expect_err("must reject");
     assert!(
         matches!(err, kdbx::Error::Format),
         "expected Format, got {err:?}",
@@ -58,7 +58,7 @@ fn wrong_password_returns_authentication_error_without_leaking_password() {
     let path = fixture_dir("empty").join("db.kdbx");
     let attempted = "WRONG_SENTINEL_a8f3c2_DO_NOT_LEAK";
 
-    let err = kdbx::Database::open(&path, attempted).expect_err("must reject");
+    let err = kdbx::Database::open(&path, attempted, None).expect_err("must reject");
     assert!(
         matches!(err, kdbx::Error::Authentication),
         "expected Authentication, got {err:?}",
@@ -92,7 +92,7 @@ fn tampered_payload_returns_integrity_error() {
     bytes[tampered_index] ^= 0xff;
     fs::write(&dst, &bytes).expect("write tampered");
 
-    let err = kdbx::Database::open(&dst, &password).expect_err("must reject");
+    let err = kdbx::Database::open(&dst, &password, None).expect_err("must reject");
     assert!(
         matches!(err, kdbx::Error::IntegrityCheck | kdbx::Error::Format),
         "expected IntegrityCheck or Format, got {err:?}",

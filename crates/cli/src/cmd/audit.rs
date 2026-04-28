@@ -6,6 +6,9 @@ use ::audit::{AuditConfig, CompositeKeyInfo, Finding, Severity};
 #[derive(clap::Args)]
 pub struct Args {
     pub path: PathBuf,
+    /// Path to a keyfile (in addition to the passphrase).
+    #[arg(long)]
+    pub keyfile: Option<PathBuf>,
     /// Emit findings as a JSON array.
     #[arg(long)]
     pub json: bool,
@@ -18,16 +21,13 @@ pub struct Args {
 
 pub fn run(args: Args) -> anyhow::Result<ExitCode> {
     let pass = super::read_passphrase(args.pass_stdin)?;
-    let db = kdbx::Database::open(&args.path, &pass)?;
-    // The CLI today opens databases with a passphrase only (no
-    // --keyfile flag yet). This will need to change when we wire
-    // additional factors through `kdbx::Database::open`.
-    let findings = ::audit::run(
-        &db,
-        &pass,
-        CompositeKeyInfo::PassphraseOnly,
-        &AuditConfig::default(),
-    );
+    let composite = if args.keyfile.is_some() {
+        CompositeKeyInfo::HasExtraFactor
+    } else {
+        CompositeKeyInfo::PassphraseOnly
+    };
+    let db = kdbx::Database::open(&args.path, &pass, args.keyfile.as_deref())?;
+    let findings = ::audit::run(&db, &pass, composite, &AuditConfig::default());
 
     if args.json {
         let buf = serde_json::to_string_pretty(&findings)?;

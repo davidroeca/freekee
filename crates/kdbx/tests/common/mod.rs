@@ -29,13 +29,13 @@ pub fn assert_self_roundtrip(fixture: &str) {
     let password = fixture_password(fixture);
 
     let original =
-        kdbx::Database::open(&path, &password).unwrap_or_else(|e| panic!("open {fixture}: {e}"));
+        kdbx::Database::open(&path, &password, None).unwrap_or_else(|e| panic!("open {fixture}: {e}"));
     let tempdir = tempfile::tempdir().expect("tempdir");
     let out_path = tempdir.path().join(format!("{fixture}-roundtrip.kdbx"));
     original
         .save(&out_path, &password)
         .unwrap_or_else(|e| panic!("save {fixture}: {e}"));
-    let reopened = kdbx::Database::open(&out_path, &password)
+    let reopened = kdbx::Database::open(&out_path, &password, None)
         .unwrap_or_else(|e| panic!("reopen {fixture}: {e}"));
 
     assert_eq!(original, reopened, "round-trip must preserve {fixture}");
@@ -50,19 +50,19 @@ pub fn assert_roundtrip_idempotent(fixture: &str) {
     let tempdir = tempfile::tempdir().expect("tempdir");
 
     let original =
-        kdbx::Database::open(&path, &password).unwrap_or_else(|e| panic!("open {fixture}: {e}"));
+        kdbx::Database::open(&path, &password, None).unwrap_or_else(|e| panic!("open {fixture}: {e}"));
 
     let once_path = tempdir.path().join(format!("{fixture}-rt1.kdbx"));
     original
         .save(&once_path, &password)
         .unwrap_or_else(|e| panic!("save1 {fixture}: {e}"));
-    let once = kdbx::Database::open(&once_path, &password)
+    let once = kdbx::Database::open(&once_path, &password, None)
         .unwrap_or_else(|e| panic!("reopen1 {fixture}: {e}"));
 
     let twice_path = tempdir.path().join(format!("{fixture}-rt2.kdbx"));
     once.save(&twice_path, &password)
         .unwrap_or_else(|e| panic!("save2 {fixture}: {e}"));
-    let twice = kdbx::Database::open(&twice_path, &password)
+    let twice = kdbx::Database::open(&twice_path, &password, None)
         .unwrap_or_else(|e| panic!("reopen2 {fixture}: {e}"));
 
     assert_eq!(
@@ -80,7 +80,7 @@ pub fn assert_expected_snapshot_matches(fixture: &str) {
     let expected_path = dir.join("expected.json");
     let password = fixture_password(fixture);
 
-    let db = kdbx::Database::open(&kdbx_path, &password)
+    let db = kdbx::Database::open(&kdbx_path, &password, None)
         .unwrap_or_else(|e| panic!("open {fixture}: {e}"));
     let actual = kdbx::snapshot::expected_snapshot(&db);
 
@@ -112,7 +112,7 @@ pub fn assert_keepassxc_can_open(fixture: &str) {
     let out_path = tempdir.path().join(format!("{fixture}-for-keepassxc.kdbx"));
 
     let original =
-        kdbx::Database::open(&src, &password).unwrap_or_else(|e| panic!("open {fixture}: {e}"));
+        kdbx::Database::open(&src, &password, None).unwrap_or_else(|e| panic!("open {fixture}: {e}"));
     original
         .save(&out_path, &password)
         .unwrap_or_else(|e| panic!("save {fixture}: {e}"));

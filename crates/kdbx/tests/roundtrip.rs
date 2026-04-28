@@ -9,11 +9,26 @@ mod common;
 use common::{assert_roundtrip_idempotent, assert_self_roundtrip, fixture_dir, fixture_password};
 
 #[test]
+fn read_with_keyfile_fixture_succeeds() {
+    let dir = fixture_dir("with-keyfile");
+    let password = fixture_password("with-keyfile");
+    let keyfile = dir.join("keyfile.bin");
+
+    let db = kdbx::Database::open(&dir.join("db.kdbx"), &password, Some(&keyfile))
+        .expect("open with-keyfile fixture");
+
+    assert!(
+        db.root_entry_count() > 0,
+        "with-keyfile fixture must have at least one entry"
+    );
+}
+
+#[test]
 fn read_empty_database_has_no_entries_or_subgroups() {
     let path = fixture_dir("empty").join("db.kdbx");
     let password = fixture_password("empty");
 
-    let db = kdbx::Database::open(&path, &password).expect("open empty fixture");
+    let db = kdbx::Database::open(&path, &password, None).expect("open empty fixture");
 
     assert_eq!(
         db.root_entry_count(),
@@ -37,7 +52,7 @@ fn read_single_entry_has_one_populated_entry() {
     let path = fixture_dir("single-entry").join("db.kdbx");
     let password = fixture_password("single-entry");
 
-    let db = kdbx::Database::open(&path, &password).expect("open single-entry fixture");
+    let db = kdbx::Database::open(&path, &password, None).expect("open single-entry fixture");
 
     assert_eq!(
         db.root_entry_count(),

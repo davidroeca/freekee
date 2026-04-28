@@ -77,10 +77,16 @@ pub struct Database {
 }
 
 impl Database {
-    /// Open a KDBX file with a passphrase.
-    pub fn open(path: &Path, password: &str) -> Result<Self> {
+    /// Open a KDBX file with a passphrase and an optional keyfile.
+    ///
+    /// Pass `keyfile = None` for passphrase-only databases.
+    pub fn open(path: &Path, password: &str, keyfile: Option<&Path>) -> Result<Self> {
         let mut file = File::open(path)?;
-        let key = DatabaseKey::new().with_password(password);
+        let mut key = DatabaseKey::new().with_password(password);
+        if let Some(kf_path) = keyfile {
+            let mut kf = File::open(kf_path)?;
+            key = key.with_keyfile(&mut kf)?;
+        }
         let inner = keepass::Database::open(&mut file, key)?;
         Ok(Self { inner })
     }

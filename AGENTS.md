@@ -90,6 +90,7 @@ cd app && bun run tauri ios dev
 ## Workflow conventions
 
 - Branch per feature. Conventional Commits. Squash-merge with a meaningful summary.
+- **Before every commit**: run `cargo fmt` to apply formatting, then `cargo fmt --check` to verify. CI gates on `--check`; a commit that doesn't pass it is dead on arrival.
 - Every PR: tests added/updated, `docs/` updated if behavior changed, audit checks updated if a new weak configuration is identified upstream.
 - Crypto-touching or audit-rule PRs are flagged `security-review` and require explicit human sign-off.
 - Crypto-related crates pin exact versions (`=0.x.y`). Other deps may use caret. New deps need justification in the PR description.

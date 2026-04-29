@@ -15,6 +15,10 @@ zeroize.workspace = true
 chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+# `keepass`'s `KdfConfig::Argon2id` variant carries an `argon2::Version`.
+# Crate is named `rust-argon2` on crates.io but exposes itself as
+# `argon2` in code. We hardcode `Version13` and never expose the type.
+rust-argon2 = "3.0"
 
 [[bin]]
 name = "dump-expected"

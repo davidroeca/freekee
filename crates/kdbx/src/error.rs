@@ -24,6 +24,15 @@ pub enum Error {
 
     #[error("unsupported KDBX version")]
     UnsupportedVersion,
+
+    #[error("entry or group not found")]
+    NotFound,
+
+    #[error("entry or group already exists at the requested path")]
+    AlreadyExists,
+
+    #[error("invalid path: empty title or group segment")]
+    InvalidPath,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

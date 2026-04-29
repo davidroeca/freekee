@@ -818,6 +818,7 @@ dependencies = [
  "chrono",
  "keepass",
  "proptest",
+ "rust-argon2",
  "serde",
  "serde_json",
  "tempfile",

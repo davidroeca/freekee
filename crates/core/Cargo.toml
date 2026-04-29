@@ -11,6 +11,16 @@ publish = false
 [dependencies]
 kdbx = { path = "../kdbx" }
 audit = { path = "../audit" }
+thiserror.workspace = true
+zeroize.workspace = true
+chrono.workspace = true
+# Used by PasswordPolicy::generate. Pulled in transitively via
+# `keepass`, but listed directly so the dep graph is honest about
+# what core uses.
+getrandom = "0.3"
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints.rust]
 unsafe_code = "forbid"

@@ -624,7 +624,12 @@ name = "freekee-core"
 version = "0.0.1"
 dependencies = [
  "audit",
+ "chrono",
+ "getrandom 0.3.4",
  "kdbx",
+ "tempfile",
+ "thiserror",
+ "zeroize",
 ]
 
 [[package]]

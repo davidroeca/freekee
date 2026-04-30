@@ -36,3 +36,14 @@ Verify = a file we wrote can be re-opened by `keepassxc-cli` (gated on the `keep
    Status: blocked on PR #312 review. Once it lands and we bump `keepass`, the 6 `keepassxc_can_open_written_*` tests (currently `#[ignore]` with reason "blocked on upstream keepass-rs PR") flip to green and the CI step changes from `cargo build --tests` back to `cargo test`.
 
 3. **KDBX minor version normalized to 0 on parse.** `Database::config.version` always reports `KDB4(0)` after parsing, regardless of whether the file header says `KDB4(0)` or `KDB4(1)`. Visible via `cargo run --features dump-expected --bin dump-expected` against the `empty` fixture (header is KDBX 4.1, dump reports `kdb4.0`). Cosmetic for round-trip — both directions read consistently — but means our own writes are always emitted as KDBX 4.0. Suitable for a follow-up upstream issue (not yet filed).
+
+## Mutation-path semantics (M1)
+
+Every entry mutation routes through upstream change-tracking machinery so the resulting file behaves correctly under KeePassXC sync:
+
+- **Field edits use `EntryMut::edit_tracking`.** The wrapper's `Database::set_entry_field` and the `set` / `rotate entry` rotations all funnel through this closure, which snapshots the prior `Entry` into `History` and stamps `times.last_modification` automatically. Bypassing it (writing `entry.fields[…]` directly) would silently drop the audit trail KeePassXC users expect.
+- **Deletes use `EntryTrack::remove`, not the plain `EntryMut::remove`.** Only the tracking variant adds the entry's UUID to the database's `deleted_objects` registry. Without it KeePassXC treats the missing entry as "newer state on the other side" and resurrects it on the next merge. The wrapper's `Database::remove_entry` hides this trap; `Database::deleted_object_count()` lets tests confirm the tombstone landed.
+- **Moves and renames also flow through `track_changes`** so cross-group relocation and same-group rename both record a history snapshot and an updated `last_modification`.
+- **`Database::save` regenerates the KDF salt and IVs from `getrandom` on every call.** That is the only "rekey" primitive freekee uses — `rotate passphrase` is just a `save` with the new passphrase, and `rotate kdf-params` mutates `config.kdf_config` and re-saves so the next derivation uses the new params plus a fresh salt.
+
+Known mutation-side gap, deferred to M2: `kdbx::Database::save` is passphrase-only today, even when the vault was opened with a keyfile. `core::Vault::save_and_verify_with_backup` deliberately verifies with `keyfile: None` to match what save produced. Tracked under "M2 candidates / `rotate keyfile`" in `PLAN.md`; closing it lifts the parallel `freekee init --keyfile` rejection.

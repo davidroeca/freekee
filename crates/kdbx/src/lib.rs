@@ -497,4 +497,29 @@ impl Entry<'_> {
     pub fn attachment_sizes(&self) -> impl Iterator<Item = usize> + '_ {
         self.inner.attachments().map(|a| a.data.get().len())
     }
+
+    /// Group-name chain from root down to (and including) this
+    /// entry's immediate parent group. The root group itself is never
+    /// included; an entry directly under the root returns an empty
+    /// vector. Names are owned so the result outlives any
+    /// intermediate `GroupRef` borrow chain.
+    pub fn group_path(&self) -> Vec<String> {
+        // Walk via `GroupId` (a `Copy` value) rather than chaining
+        // `GroupRef`s — upstream `GroupRef::parent` returns a borrow
+        // tied to the local ref, which can't be fed back into the
+        // loop binding.
+        let db = self.inner.database();
+        let mut chain: Vec<String> = Vec::new();
+        let mut current_id = Some(self.inner.parent().id());
+        while let Some(id) = current_id {
+            let Some(g) = db.group(id) else { break };
+            // Stop at the root: it has no parent, and KeePass renders
+            // paths relative to root.
+            let Some(parent) = g.parent() else { break };
+            chain.push(g.name.clone());
+            current_id = Some(parent.id());
+        }
+        chain.reverse();
+        chain
+    }
 }

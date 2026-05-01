@@ -1,7 +1,7 @@
 //! Compatibility test harness against `tests/roundtrip/fixtures/`.
 //!
 //! Each test reads a KeePassXC-generated fixture and asserts a structural
-//! property. Round-trip (read → write → read) coverage is added per the
+//! property. Round-trip (read -> write -> read) coverage is added per the
 //! milestone-0 TDD plan.
 
 mod common;

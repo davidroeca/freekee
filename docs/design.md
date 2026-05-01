@@ -1,10 +1,10 @@
-# freekee — Design Document
+# freekee - Design Document
 
 ## 1. Overview
 
 `freekee` is a cross-platform password manager built on the standard KeePass KDBX4 file format. It targets Linux, macOS, Windows, iOS, and Android from a single Rust core via Tauri 2, plus a standalone CLI binary.
 
-The motivating use case: an existing user of KeePassXC (Linux) and Strongbox (iOS) syncing a `.kdbx` via Dropbox, who wants better tooling — particularly first-class key rotation and a confidence check that their database is configured to be safe against current and emerging threats.
+The motivating use case: an existing user of KeePassXC (Linux) and Strongbox (iOS) syncing a `.kdbx` via Dropbox, who wants better tooling - particularly first-class key rotation and a confidence check that their database is configured to be safe against current and emerging threats.
 
 freekee writes only standard KDBX4. Files written by freekee can be opened, edited, and saved by KeePassXC, Strongbox, KeePassDX, and any other KeePass client without conversion or data loss. We are not creating a new format.
 
@@ -21,7 +21,7 @@ freekee writes only standard KDBX4. Files written by freekee can be opened, edit
 
 - Custom file format. We use standard KDBX4.
 - Custom cryptographic primitives. We rely on what KeePass already specifies.
-- A post-quantum _envelope_ around KDBX. The threat model does not justify it (see §4.2).
+- A post-quantum _envelope_ around KDBX. The threat model does not justify it (see section 4.2).
 - Browser autofill in v1 (post-v1 milestone).
 - iOS AutoFill extension in v0.1 (deferred to v0.2).
 - Apple Watch, Android Wear (post-v1).
@@ -38,16 +38,16 @@ freekee writes only standard KDBX4. Files written by freekee can be opened, edit
 - A future adversary with a cryptographically relevant quantum computer applies known quantum algorithms (Grover, Shor) to a stolen file.
 - User is unaware their database is on a weak configuration (e.g., AES-128, AES-KDF, weak Argon2 parameters). The audit feature exists for this case.
 
-### 4.2 Quantum threats — and why no envelope
+### 4.2 Quantum threats - and why no envelope
 
 KDBX4 at-rest encryption is symmetric throughout. There is no public-key cryptography in the KDBX4 file format itself.
 
 - **Shor's algorithm** breaks RSA, DH, and ECC. KDBX4 uses none of these. Not applicable.
 - **Grover's algorithm** offers a quadratic speedup against symmetric ciphers and hashes. Effective security:
-  - AES-256 → ~128 bits PQ. Comfortable.
-  - AES-128 → ~64 bits PQ. **Not safe.** Audit must flag.
-  - ChaCha20 → ~128 bits PQ (256-bit key). Comfortable.
-  - SHA-256 → ~128 bits collision PQ. Comfortable.
+  - AES-256 -> ~128 bits PQ. Comfortable.
+  - AES-128 -> ~64 bits PQ. **Not safe.** Audit must flag.
+  - ChaCha20 -> ~128 bits PQ (256-bit key). Comfortable.
+  - SHA-256 -> ~128 bits collision PQ. Comfortable.
 - **Argon2id** is memory-hard. Grover provides limited benefit; the bottleneck is memory bandwidth, not gate count. Strong parameters remain strong.
 
 Conclusion: **a properly configured KDBX4 file is post-quantum-secure at rest under current cryptographic understanding.** The right intervention is _configuration audit_, not a new format. This is the central design call.
@@ -69,25 +69,20 @@ Caveat for the threat model: this assumes Grover-on-symmetric is the dominant qu
 
 ## 5. Architecture
 
-```
-┌─────────────────────────────────────────────────┐
-│  UI: Tauri webview (Solid/Svelte)  │  CLI       │
-└──────────────────┬─────────────────┴──────┬─────┘
-                   │ DTOs                   │
-              ┌────▼─────────────┐          │
-              │  tauri-bridge    │          │
-              └────┬─────────────┘          │
-                   │                        │
-                   ▼                        ▼
-              ┌────────────────────────────────┐
-              │           core                 │
-              │  Vault, rotation, audit invoke │
-              └────┬──────────────────┬────────┘
-                   │                  │
-            ┌──────▼──────┐    ┌──────▼──────┐
-            │   audit     │    │   kdbx      │
-            │ (analysis)  │    │ (keepass-ng)│
-            └─────────────┘    └─────────────┘
+```mermaid
+graph TD
+    UI["UI: Tauri webview (Solid/Svelte)"]
+    CLI["CLI"]
+    TB["tauri-bridge"]
+    CORE["core\n(Vault, rotation, audit invoke)"]
+    AUDIT["audit\n(analysis)"]
+    KDBX["kdbx\n(keepass-ng)"]
+
+    UI -- DTOs --> TB
+    CLI --> CORE
+    TB --> CORE
+    CORE --> AUDIT
+    CORE --> KDBX
 ```
 
 Isolation rules:
@@ -124,7 +119,7 @@ The audit crate is freekee's headline differentiator. It takes a parsed database
 
 **Composite key:**
 
-- `weak-passphrase`: zxcvbn estimate < 60 bits. Severity: high. Note: `zxcvbn-rs` 3.1.1 caps `guesses_log10` at ~19.27 (≈64 bits), so this threshold is the practical ceiling — anything stricter cannot be expressed with the current estimator.
+- `weak-passphrase`: zxcvbn estimate < 60 bits. Severity: high. Note: `zxcvbn-rs` 3.1.1 caps `guesses_log10` at ~19.27 (~=64 bits), so this threshold is the practical ceiling - anything stricter cannot be expressed with the current estimator.
 - `passphrase-only`: no keyfile, no HMAC challenge. Severity: low (informational).
 
 **Entries:**
@@ -222,8 +217,8 @@ Known friction: developing on a physical iOS device requires Xcode open with the
 - **Unit tests** colocated with code in each crate.
 - **Integration tests** in `tests/` per crate.
 - **Property tests** (`proptest`) for round-trip: `parse(write(parse(file))) == parse(file)` for any KDBX4 fixture.
-- **Roundtrip fixtures**: KeePassXC-generated databases under `tests/roundtrip/fixtures/`. Each fixture has a `.kdbx` and an `expected.json` describing its parsed structure. Tests assert (a) we can read it, (b) we can write it back, (c) KeePassXC can read what we wrote — the third via a `keepassxc-cli` invocation in CI.
-- **Audit golden tests**: a fixture database with known weaknesses → asserted findings list. Adding a rule = adding a golden file.
+- **Roundtrip fixtures**: KeePassXC-generated databases under `tests/roundtrip/fixtures/`. Each fixture has a `.kdbx` and an `expected.json` describing its parsed structure. Tests assert (a) we can read it, (b) we can write it back, (c) KeePassXC can read what we wrote - the third via a `keepassxc-cli` invocation in CI.
+- **Audit golden tests**: a fixture database with known weaknesses -> asserted findings list. Adding a rule = adding a golden file.
 - **Fuzzing** (`cargo-fuzz` + libFuzzer): KDBX parser. Corpus checked in (or via git-lfs).
 - **Negative tests**: tampered ciphertext fails, truncated header fails parse, malformed XML rejected, etc.
 - **Secret-leakage meta-test**: runs the CLI with a known plaintext, captures stdout/stderr, grep's for the plaintext. Fails if found.
@@ -238,7 +233,7 @@ Known friction: developing on a physical iOS device requires Xcode open with the
 | v0.4.0    | Browser extension (separate repo, talks to native messaging host).                                                                                      |
 | v1.0.0    | Stable interface frozen, security review completed, packaged binaries for all targets, audit ruleset published as a versioned spec.                     |
 
-Suggested calendar: v0.1 in 6–8 weeks of focused work (faster than the prior plan since there's no envelope crate); v0.2 another 4–6.
+Suggested calendar: v0.1 in 6-8 weeks of focused work (faster than the prior plan since there's no envelope crate); v0.2 another 4-6.
 
 ## 12. Open questions
 
@@ -264,6 +259,6 @@ Suggested calendar: v0.1 in 6–8 weeks of focused work (faster than the prior p
 - **KDBX4**: KeePass database format v4, introduced in KeePass 2.35.
 - **Argon2id**: memory-hard password hashing function, current KeePass recommended KDF.
 - **AES-KDF**: legacy KDBX key derivation; just iterated AES. Discouraged.
-- **HNDL**: Harvest Now, Decrypt Later — the threat that a stored ciphertext today might be cracked by a future attacker with new capabilities.
+- **HNDL**: Harvest Now, Decrypt Later - the threat that a stored ciphertext today might be cracked by a future attacker with new capabilities.
 - **HIBP**: Have I Been Pwned, the breached-password lookup service. Uses k-anonymity so the full password never leaves the client.
 - **Composite key**: KeePass's term for the combination of passphrase + keyfile + hardware HMAC that unlocks a database.

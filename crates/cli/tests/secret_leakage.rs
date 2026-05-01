@@ -1,10 +1,10 @@
-//! Secret-leakage meta-test. Per `AGENTS.md` and milestone-0 plan §8.
+//! Secret-leakage meta-test. Per `AGENTS.md` and milestone-0 plan section 8.
 //!
 //! Builds a canary KDBX with two known sentinel strings (the master
 //! passphrase and one entry's password). Runs every read-only CLI
 //! command against it (correct + wrong passphrase) and asserts that
 //! neither sentinel substring appears in any captured stdout or
-//! stderr — including error output from the wrong-password paths.
+//! stderr - including error output from the wrong-password paths.
 
 #![allow(clippy::disallowed_methods, clippy::unwrap_used)]
 

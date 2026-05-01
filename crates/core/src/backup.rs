@@ -30,8 +30,8 @@ pub struct BackupOutcome {
 }
 
 /// RAII handle for a backup file taken before a rotation. The
-/// backup is **never auto-deleted** on drop — even after `commit()`
-/// — because we can't tell whether the user wants to keep it. The
+/// backup is **never auto-deleted** on drop - even after `commit()`.
+/// Because we can't tell whether the user wants to keep it. The
 /// `committed` flag is informational, used by callers (e.g. the
 /// rollback path) to decide whether the backup is still authoritative.
 #[derive(Debug)]
@@ -145,7 +145,7 @@ mod tests {
         };
         assert!(
             backup_path.exists(),
-            "backup file must remain after uncommitted Drop — \
+            "backup file must remain after uncommitted Drop - \
              we can't tell whether the user wants to keep it"
         );
     }

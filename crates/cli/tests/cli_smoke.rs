@@ -1,4 +1,4 @@
-//! Smoke tests for the read-only CLI surface. Per milestone-0 plan §7.
+//! Smoke tests for the read-only CLI surface. Per milestone-0 plan section 7.
 
 #![allow(clippy::disallowed_methods, clippy::unwrap_used)]
 

@@ -35,7 +35,7 @@ Every mutating command backs up the database before writing and rolls back on fa
 
 ## Known gaps
 
-- `set password=mysecret` exposes the value in shell history — a stdin input path is planned.
+- `set password=mysecret` exposes the value in shell history - a stdin input path is planned.
 - Keyfile-protected databases can be read but not written yet.
 - No clipboard integration, no default database config, no shell completions.
 

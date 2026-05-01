@@ -1,6 +1,6 @@
 [package]
 name = "audit"
-description = "freekee KDBX4 configuration audit. Pure analysis, no I/O. See docs/design.md §7."
+description = "freekee KDBX4 configuration audit. Pure analysis, no I/O. See docs/design.md section 7."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

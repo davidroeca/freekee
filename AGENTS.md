@@ -4,7 +4,7 @@ Instructions for Claude Code when working in this repository. Read this file fir
 
 ## Project: freekee
 
-A cross-platform password manager that speaks **standard KDBX4** — full read/write compatibility with KeePassXC, Strongbox, KeePassDX, and every other KeePass client. The added value is in tooling, not file format: ergonomic CLI, first-class key/credential rotation, and a post-quantum-aware audit feature that helps users stay on safe symmetric configurations.
+A cross-platform password manager that speaks **standard KDBX4** - full read/write compatibility with KeePassXC, Strongbox, KeePassDX, and every other KeePass client. The added value is in tooling, not file format: ergonomic CLI, first-class key/credential rotation, and a post-quantum-aware audit feature that helps users stay on safe symmetric configurations.
 
 The primary author syncs a `.kdbx` between Linux (KeePassXC) and iOS (Strongbox) via Dropbox. Every design decision must preserve that workflow. **A file written by freekee must open cleanly in KeePassXC 2.7+.** No exceptions.
 
@@ -22,9 +22,9 @@ Quantum computers threaten asymmetric crypto (Shor's algorithm) far more than sy
 
 If you find yourself writing implementation code without a failing test on disk, stop and write the test first. Crypto-adjacent code (KDF parameter changes, cipher selection logic, audit checks) especially.
 
-**Never write or modify cryptographic primitives.** We use audited crates only — primarily whatever `keepass-rs` already pulls in (AES, ChaCha20, Argon2, HMAC). If a task seems to require touching primitive crypto directly, stop and ask the human.
+**Never write or modify cryptographic primitives.** We use audited crates only - primarily whatever `keepass-rs` already pulls in (AES, ChaCha20, Argon2, HMAC). If a task seems to require touching primitive crypto directly, stop and ask the human.
 
-**Never log, print, or include in error messages:** plaintext passwords, master passphrases, derived keys, keyfile contents, or decrypted entry values. Error types must not embed secret material. Use `zeroize` for in-memory secrets where the underlying types support it. There is a meta-test that runs the CLI with a known plaintext, captures all stdout/stderr, and grep's for the plaintext — keep it green.
+**Never log, print, or include in error messages:** plaintext passwords, master passphrases, derived keys, keyfile contents, or decrypted entry values. Error types must not embed secret material. Use `zeroize` for in-memory secrets where the underlying types support it. There is a meta-test that runs the CLI with a known plaintext, captures all stdout/stderr, and grep's for the plaintext - keep it green.
 
 **KDBX round-trip must be lossless.** Any database written by KeePassXC 2.7+ must round-trip through our code such that re-opening it in KeePassXC shows no data loss. The fixture suite in `tests/roundtrip/` is the source of truth. Adding a feature that breaks a fixture is a regression.
 
@@ -34,15 +34,15 @@ If you find yourself writing implementation code without a failing test on disk,
 
 Monorepo Cargo workspace. See `docs/design.md` for full crate responsibilities. Quick map:
 
-- `crates/kdbx/` — wraps `keepass-rs` behind a stable trait; isolates upstream churn
-- `crates/audit/` — pure analysis: takes a parsed database, returns findings
-- `crates/core/` — orchestrator: `Vault::open`, `vault.save`, rotation operations, audit invocation
-- `crates/cli/` — `freekee` binary, clap-based, no business logic
-- `crates/tauri-bridge/` — `#[tauri::command]` handlers returning DTOs
-- `app/src-tauri/` — single Tauri 2 project, emits desktop + mobile
-- `plugins/tauri-plugin-keychain/` — iOS Keychain / Android Keystore
+- `crates/kdbx/` - wraps `keepass-rs` behind a stable trait; isolates upstream churn
+- `crates/audit/` - pure analysis: takes a parsed database, returns findings
+- `crates/core/` - orchestrator: `Vault::open`, `vault.save`, rotation operations, audit invocation
+- `crates/cli/` - `freekee` binary, clap-based, no business logic
+- `crates/tauri-bridge/` - `#[tauri::command]` handlers returning DTOs
+- `app/src-tauri/` - single Tauri 2 project, emits desktop + mobile
+- `plugins/tauri-plugin-keychain/` - iOS Keychain / Android Keystore
 
-Crate boundaries are enforced. The frontend never sees `core` types directly — only DTOs from `tauri-bridge`. The CLI never imports `keepass-rs` directly — only `core`. If you need to bypass a boundary, that's a design discussion, not a code change.
+Crate boundaries are enforced. The frontend never sees `core` types directly - only DTOs from `tauri-bridge`. The CLI never imports `keepass-rs` directly - only `core`. If you need to bypass a boundary, that's a design discussion, not a code change.
 
 ## JS/TS toolchain: Bun
 
@@ -56,7 +56,7 @@ bun add -d <pkg>
 bun pm ls
 ```
 
-The lockfile is `bun.lock`. Commit it. CI uses `bun install --frozen-lockfile`. Do not introduce a `package-lock.json`, `pnpm-lock.yaml`, or `yarn.lock` — pick one tool, stay on it.
+The lockfile is `bun.lock`. Commit it. CI uses `bun install --frozen-lockfile`. Do not introduce a `package-lock.json`, `pnpm-lock.yaml`, or `yarn.lock` - pick one tool, stay on it.
 
 If a Tauri plugin's docs assume npm, the equivalent Bun invocation is almost always a direct substitution; only flag a divergence if Bun actually fails.
 
@@ -83,7 +83,7 @@ cargo run -p cli -- audit path/to/db.kdbx
 # Tauri (desktop)
 cd app && bun run tauri dev
 
-# Tauri (iOS — requires macOS + Xcode)
+# Tauri (iOS - requires macOS + Xcode)
 cd app && bun run tauri ios dev
 ```
 
@@ -112,7 +112,7 @@ cd app && bun run tauri ios dev
 - Unit tests run in under 30 seconds
 - `tests/roundtrip/fixtures/` covers every KeePassXC 2.7+ feature: groups, entries, history, attachments, custom icons, custom data, auto-type, expiry, tags, deleted-objects
 - A KDBX file written by `freekee` opens in KeePassXC with zero warnings and zero data loss
-- `freekee audit` produces actionable output — every finding has a remediation command
+- `freekee audit` produces actionable output - every finding has a remediation command
 - `cargo doc --workspace --no-deps` produces clean docs
 - A new contributor can clone, `cargo test`, and have a green build in under five minutes
 

@@ -1,4 +1,4 @@
-//! `freekee rotate <subcommand>` — credential and parameter rotations.
+//! `freekee rotate <subcommand>` - credential and parameter rotations.
 //! Each subcommand routes through `core::Vault::rotate_*`, which runs
 //! the shared backup / save / verify / rollback tail.
 

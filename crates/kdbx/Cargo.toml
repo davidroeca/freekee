@@ -1,6 +1,6 @@
 [package]
 name = "kdbx"
-description = "freekee KDBX4 wrapper. See docs/design.md §6."
+description = "freekee KDBX4 wrapper. See docs/design.md section 6."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

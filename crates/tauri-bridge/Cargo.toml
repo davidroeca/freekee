@@ -1,6 +1,6 @@
 [package]
 name = "tauri-bridge"
-description = "freekee Tauri 2 command handlers (DTOs only). Deferred to milestone 1. See docs/design.md §5."
+description = "freekee Tauri 2 command handlers (DTOs only). Deferred to milestone 1. See docs/design.md section 5."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -2,7 +2,7 @@
 //! `rotate entry`. Uses [`getrandom::fill`] for entropy and uniform
 //! rejection sampling over the chosen alphabet to avoid modulo bias.
 //!
-//! This is glue, not crypto. We do not implement any primitive — see
+//! This is glue, not crypto. We do not implement any primitive - see
 //! `AGENTS.md` "Never write or modify cryptographic primitives."
 
 use zeroize::Zeroizing;

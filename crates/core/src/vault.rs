@@ -1,7 +1,7 @@
-//! `Vault` — the orchestrator above `kdbx::Database`. Owns a parsed
+//! `Vault` - the orchestrator above `kdbx::Database`. Owns a parsed
 //! database, the file path, and the credentials used to unlock it.
 //! All CLI and tauri-bridge code goes through this type rather than
-//! reaching into `kdbx` directly (per `docs/design.md` §5).
+//! reaching into `kdbx` directly (per `docs/design.md` section 5).
 
 use std::path::{Path, PathBuf};
 
@@ -168,9 +168,9 @@ impl Vault {
 
     /// Generate a fresh password for the entry at `path` using
     /// `policy`, then save with the existing passphrase. The prior
-    /// password lands in entry history (via `set_field` →
+    /// password lands in entry history (via `set_field` ->
     /// `edit_tracking`). The new password is **not** returned in
-    /// the outcome — fetch it via the underlying database accessor
+    /// the outcome - fetch it via the underlying database accessor
     /// when the caller has explicitly opted in to seeing it.
     pub fn rotate_entry(
         &mut self,
@@ -219,7 +219,7 @@ impl Vault {
         }
         let outcome = self.save_and_verify_with_backup(opts.backup, new.as_str())?;
         // Only update the held passphrase after the new file has
-        // verified — on rollback, `self.password` still matches the
+        // verified - on rollback, `self.password` still matches the
         // restored on-disk state.
         self.password = new;
         Ok(outcome)
@@ -228,7 +228,7 @@ impl Vault {
     /// Shared rotation tail: take a backup, save with `password`,
     /// reopen to confirm the file decrypts, roll back on failure.
     /// `password` is the credential used both to write the file and
-    /// to verify it (always equal — `kdbx::Database::save` is
+    /// to verify it (always equal - `kdbx::Database::save` is
     /// passphrase-only today; keyfile-on-save lands in M2).
     fn save_and_verify_with_backup(
         &mut self,

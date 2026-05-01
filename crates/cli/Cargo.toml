@@ -1,6 +1,6 @@
 [package]
 name = "cli"
-description = "freekee command-line interface. See docs/design.md §8."
+description = "freekee command-line interface. See docs/design.md section 8."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -1,4 +1,4 @@
-//! `freekee rotate kdf-params` — replace Argon2id parameters in
+//! `freekee rotate kdf-params` - replace Argon2id parameters in
 //! place. Memory is taken in MiB at the CLI; converted to bytes
 //! before reaching `core` (KeePass stores memory in bytes).
 

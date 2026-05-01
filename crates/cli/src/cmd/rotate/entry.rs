@@ -1,4 +1,4 @@
-//! `freekee rotate entry` — generate a fresh password for one entry,
+//! `freekee rotate entry` - generate a fresh password for one entry,
 //! save with backup+verify, and (optionally) echo the new value.
 //!
 //! `core::Vault::rotate_entry` deliberately does not return the

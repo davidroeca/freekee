@@ -1,4 +1,4 @@
-//! `freekee history` — show how many prior versions exist for an
+//! `freekee history` - show how many prior versions exist for an
 //! entry, plus the modification timestamp recorded on each one.
 
 use std::path::PathBuf;

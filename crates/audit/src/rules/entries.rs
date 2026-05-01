@@ -1,4 +1,4 @@
-//! Per-entry rules. See `docs/design.md` §7.1.
+//! Per-entry rules. See `docs/design.md` section 7.1.
 //!
 //! IMPORTANT: rules in this file see plaintext entry passwords but MUST
 //! NOT embed any of them in `Finding`. Only derived metadata (entry

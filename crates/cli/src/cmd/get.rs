@@ -1,4 +1,4 @@
-//! `freekee get` — show one entry's fields. The password is omitted
+//! `freekee get` - show one entry's fields. The password is omitted
 //! by default. `--show` is the **only** subcommand allowed to surface
 //! a stored entry password; the secret-leakage meta-test enforces a
 //! carve-out specifically for that flag.
@@ -49,7 +49,7 @@ pub fn run(args: Args) -> anyhow::Result<ExitCode> {
             println!("Password: {p}");
         }
     } else {
-        println!("Password: <hidden — pass --show to reveal>");
+        println!("Password: <hidden - pass --show to reveal>");
     }
     Ok(ExitCode::SUCCESS)
 }

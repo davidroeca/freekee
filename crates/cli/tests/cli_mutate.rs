@@ -31,7 +31,7 @@ fn tiny_template() -> NewDatabaseTemplate {
     }
 }
 
-/// Build a fresh KDBX at `path` with a couple of entries — one under
+/// Build a fresh KDBX at `path` with a couple of entries - one under
 /// root, one under `Personal/`. Used by ls/get/history tests so the
 /// binary can be exercised against a known state. `Vault` does not yet
 /// expose `ensure_group`, so the test driver reaches one layer down to

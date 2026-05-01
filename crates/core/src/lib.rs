@@ -1,6 +1,6 @@
 //! freekee orchestrator. Composes `kdbx` and `audit`. All CLI and
 //! tauri-bridge code talks to this layer; only `core` knows about
-//! `kdbx` and `audit` directly (per `docs/design.md` §5).
+//! `kdbx` and `audit` directly (per `docs/design.md` section 5).
 
 pub mod backup;
 mod error;

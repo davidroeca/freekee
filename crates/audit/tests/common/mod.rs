@@ -13,7 +13,7 @@ pub fn db(mutate: impl FnOnce(&mut DatabaseConfig)) -> kdbx::Database {
 }
 
 /// An Argon2id KDF that satisfies all of the strict default
-/// thresholds (memory ≥ 64 MiB, iterations ≥ 2, parallelism ≥ 2).
+/// thresholds (memory >= 64 MiB, iterations >= 2, parallelism >= 2).
 pub fn strong_kdf() -> KdfConfig {
     KdfConfig::Argon2id {
         iterations: 10,

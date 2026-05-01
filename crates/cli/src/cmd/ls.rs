@@ -1,4 +1,4 @@
-//! `freekee ls` — list every entry in the database, sorted by full
+//! `freekee ls` - list every entry in the database, sorted by full
 //! group/title path. Optional substring filter narrows the output.
 
 use std::path::PathBuf;

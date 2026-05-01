@@ -1,7 +1,7 @@
 //! KDBX4 file I/O wrapper around the `keepass` crate.
 //!
 //! Insulates the rest of the workspace from upstream churn per
-//! `docs/design.md` §6. The surface here grows test-by-test under the
+//! `docs/design.md` section 6. The surface here grows test-by-test under the
 //! milestone-0 TDD plan.
 
 mod error;
@@ -277,7 +277,7 @@ impl Database {
     ///
     /// Routes through upstream `EntryTrack::remove`. The plain
     /// `EntryMut::remove` does not populate `deleted_objects`, which
-    /// would silently break sync semantics — this wrapper hides that
+    /// would silently break sync semantics - this wrapper hides that
     /// trap.
     pub fn remove_entry(&mut self, path: EntryPath<'_>) -> Result<()> {
         if path.title.is_empty() {
@@ -340,7 +340,7 @@ impl Database {
             return Err(Error::InvalidPath);
         }
         // Walk segment by segment. For each prefix, look up; if
-        // missing, create under the parent prefix. O(n²) walks but
+        // missing, create under the parent prefix. O(n^2) walks but
         // ensure_group depths are tiny in practice.
         for i in 1..=path.segments.len() {
             let prefix = &path.segments[..i];
@@ -505,7 +505,7 @@ impl Entry<'_> {
     /// intermediate `GroupRef` borrow chain.
     pub fn group_path(&self) -> Vec<String> {
         // Walk via `GroupId` (a `Copy` value) rather than chaining
-        // `GroupRef`s — upstream `GroupRef::parent` returns a borrow
+        // `GroupRef`s - upstream `GroupRef::parent` returns a borrow
         // tied to the local ref, which can't be fed back into the
         // loop binding.
         let db = self.inner.database();

@@ -1,7 +1,7 @@
 //! Configuration audit for parsed KDBX4 databases.
 //!
 //! Pure analysis: takes a parsed database, returns findings. No I/O,
-//! no mutation. See `docs/design.md` §7. Rules live under `rules/`.
+//! no mutation. See `docs/design.md` section 7. Rules live under `rules/`.
 
 mod rules;
 mod strength;
@@ -31,7 +31,7 @@ pub enum Category {
 }
 
 /// A single audit observation. `remediation` is the exact CLI command
-/// the user can run to address the finding (per design.md §7.2).
+/// the user can run to address the finding (per design.md section 7.2).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Finding {
     pub rule: &'static str,
@@ -45,12 +45,12 @@ pub struct Finding {
 /// User-tunable thresholds.
 ///
 /// `zxcvbn` caveat: `zxcvbn-rs` 3.1.1 saturates `guesses_log10` at
-/// `log10(u64::MAX) ≈ 19.27`, which is ~64.0 bits. **No password can
-/// score above 64 bits with this library**, so any threshold ≥ 64
+/// `log10(u64::MAX) ~= 19.27`, which is ~64.0 bits. **No password can
+/// score above 64 bits with this library**, so any threshold >= 64
 /// would flag every passphrase regardless of strength. The
 /// passphrase/entry bit thresholds below intentionally sit below that
 /// cap to remain meaningful. The user-confirmed "stricter" intent
-/// from milestone-0 plan §6 is honored where it can be (`stale_*`)
+/// from milestone-0 plan section 6 is honored where it can be (`stale_*`)
 /// and noted as unachievable for the bit thresholds.
 #[derive(Debug, Clone)]
 pub struct AuditConfig {
@@ -76,7 +76,7 @@ pub struct AuditConfig {
 impl Default for AuditConfig {
     fn default() -> Self {
         Self {
-            // Below the 64-bit zxcvbn cap; matches design.md §4.4/§7.1.
+            // Below the 64-bit zxcvbn cap; matches design.md section 4.4/section 7.1.
             weak_passphrase_bits: 60.0,
             weak_entry_password_bits: 50.0,
             // User's stricter value (design.md says 365).

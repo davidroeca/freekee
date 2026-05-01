@@ -61,7 +61,7 @@ impl From<keepass::error::DatabaseSaveError> for Error {
         match err {
             E::Io(e) => Error::Io(e),
             E::UnsupportedVersion => Error::UnsupportedVersion,
-            // Serialization, Key, Cryptography, Random — none should
+            // Serialization, Key, Cryptography, Random - none should
             // include passphrase material, but we map without embedding
             // upstream Display strings to be safe against future churn.
             _ => Error::Format,

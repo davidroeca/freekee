@@ -1,5 +1,5 @@
 //! Audit rule tests. In-memory fixtures only (no file I/O, no Argon2
-//! cost). Per `docs/design.md` §7 and milestone-0 plan §6.
+//! cost). Per `docs/design.md` section 7 and milestone-0 plan section 6.
 
 #![allow(clippy::disallowed_methods, clippy::unwrap_used)]
 
@@ -9,7 +9,7 @@ use keepass::config::{DatabaseVersion, InnerCipherConfig, KdfConfig, OuterCipher
 mod common;
 use common::{db, strong_kdf};
 
-// `zxcvbn-rs` 3.1.1 saturates `guesses_log10` at ~19.27 (≈64 bits) so
+// `zxcvbn-rs` 3.1.1 saturates `guesses_log10` at ~19.27 (~=64 bits) so
 // any sufficiently complex 25+ char password reads as 64.0 bits. That
 // is comfortably above the 60-bit default threshold.
 const STRONG_PASSPHRASE: &str = "qWk3@p9Lnv8Z2!Mrx7&fE$Bc1";
@@ -968,7 +968,7 @@ fn defaults_match_committed_thresholds() {
     // `zxcvbn-rs` 3.1.1 caps at ~64 bits; thresholds sit below the cap.
     assert_eq!(cfg.weak_passphrase_bits, 60.0);
     assert_eq!(cfg.weak_entry_password_bits, 50.0);
-    // Stricter than design.md (365); user-confirmed in plan §6.
+    // Stricter than design.md (365); user-confirmed in plan section 6.
     assert_eq!(cfg.stale_password_days, 180);
     assert_eq!(cfg.weak_argon2_memory_bytes, 64 * 1024 * 1024);
     assert_eq!(cfg.weak_argon2_iters, 2);

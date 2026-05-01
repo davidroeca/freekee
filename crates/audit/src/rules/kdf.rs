@@ -1,4 +1,4 @@
-//! KDF rules. See `docs/design.md` §7.1.
+//! KDF rules. See `docs/design.md` section 7.1.
 
 use crate::{AuditConfig, Category, Finding, Severity};
 use kdbx::Kdf;

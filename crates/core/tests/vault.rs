@@ -515,8 +515,8 @@ fn rotation_rollback_restores_original_when_verify_would_fail() {
     // helper. Driving an in-place verify failure from the public API
     // requires injecting corruption between save and verify, which
     // we don't expose. Instead this test exercises the underlying
-    // BackupGuard + restore machinery end-to-end — the same pieces
-    // the rotation tail uses — to demonstrate that a "save lands,
+    // BackupGuard + restore machinery end-to-end - the same pieces
+    // the rotation tail uses - to demonstrate that a "save lands,
     // verify fails" path leaves the original recoverable.
 
     let tmp = tempfile::tempdir().unwrap();
@@ -532,7 +532,7 @@ fn rotation_rollback_restores_original_when_verify_would_fail() {
 
     let mut guard =
         freekee_core::backup::BackupGuard::create_for(&dest, chrono::Utc::now()).unwrap();
-    // Simulate "save succeeded, file is now garbage" — exactly the
+    // Simulate "save succeeded, file is now garbage" - exactly the
     // corruption the verify step is designed to catch.
     fs::write(&dest, b"this is not a kdbx file").unwrap();
     assert!(

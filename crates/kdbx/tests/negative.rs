@@ -1,5 +1,5 @@
-//! Legacy-version handling and negative paths. Per `docs/design.md` §4
-//! threat model and milestone-0 plan §5 tests #11–#15.
+//! Legacy-version handling and negative paths. Per `docs/design.md` section 4
+//! threat model and milestone-0 plan section 5 tests #11-#15.
 
 #![allow(clippy::disallowed_methods, clippy::unwrap_used)]
 
@@ -25,7 +25,7 @@ fn read_kdbx40_legacy_reports_v4_version() {
 
 #[test]
 fn read_kdbx3_legacy_reports_v3_version() {
-    // We do not write KDBX 3.x (per design §3 non-goal), but reading it
+    // We do not write KDBX 3.x (per design section 3 non-goal), but reading it
     // is acceptable so the audit layer can flag it for upgrade.
     let path = fixture_dir("kdbx3-legacy").join("db.kdbx");
     let password = fixture_password("kdbx3-legacy");

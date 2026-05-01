@@ -1,4 +1,4 @@
-//! `freekee rm` — delete an entry. Routes through `Vault::remove_entry`,
+//! `freekee rm` - delete an entry. Routes through `Vault::remove_entry`,
 //! which registers the UUID in `deleted_objects` so KeePassXC sync
 //! respects the deletion rather than resurrecting it on next merge.
 

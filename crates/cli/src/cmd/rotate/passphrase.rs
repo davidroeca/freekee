@@ -1,4 +1,4 @@
-//! `freekee rotate passphrase` — change the master passphrase.
+//! `freekee rotate passphrase` - change the master passphrase.
 
 use std::path::PathBuf;
 use std::process::ExitCode;

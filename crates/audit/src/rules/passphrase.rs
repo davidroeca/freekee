@@ -1,4 +1,4 @@
-//! Passphrase strength rule. See `docs/design.md` §7.1.
+//! Passphrase strength rule. See `docs/design.md` section 7.1.
 //!
 //! IMPORTANT: this rule receives the passphrase plaintext but MUST NOT
 //! embed any of it in `Finding`. Only the bit-strength estimate is

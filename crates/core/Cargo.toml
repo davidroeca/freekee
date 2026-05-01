@@ -1,6 +1,6 @@
 [package]
 name = "freekee-core"
-description = "freekee orchestrator: vault open/save, rotation, audit invocation. See docs/design.md §5."
+description = "freekee orchestrator: vault open/save, rotation, audit invocation. See docs/design.md section 5."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

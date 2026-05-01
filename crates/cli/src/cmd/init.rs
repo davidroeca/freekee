@@ -1,4 +1,4 @@
-//! `freekee init` — create a new KDBX file. Defaults match
+//! `freekee init` - create a new KDBX file. Defaults match
 //! `core::DEFAULT_TEMPLATE` (AES-256 outer, ChaCha20 inner, Argon2id
 //! 64 MiB / 10 iterations / 2 parallelism).
 
@@ -33,7 +33,7 @@ pub struct Args {
     pub cipher: Option<CipherChoice>,
     /// Optional keyfile to record alongside the passphrase. (Reserved
     /// for M2; today the file is written passphrase-only and a keyfile
-    /// passed here is ignored — see PLAN.md M2 follow-ups.)
+    /// passed here is ignored - see PLAN.md M2 follow-ups.)
     #[arg(long)]
     pub keyfile: Option<PathBuf>,
     /// Overwrite the destination if it already exists.

@@ -1,4 +1,4 @@
-//! `freekee mv` — relocate or rename an entry. Routes through
+//! `freekee mv` - relocate or rename an entry. Routes through
 //! `Vault::move_entry`; same-group rename and cross-group move share
 //! the same path.
 

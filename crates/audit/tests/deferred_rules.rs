@@ -2,7 +2,7 @@
 //!
 //! Each test is `#[ignore]` with a pointer to the rule it locks in. Un-
 //! ignoring is the start of the TDD loop for that rule's implementation
-//! in milestone 0.5 / v0.1 prep. Per the milestone-0 plan §6.
+//! in milestone 0.5 / v0.1 prep. Per the milestone-0 plan section 6.
 
 #![allow(clippy::disallowed_methods, clippy::unwrap_used)]
 

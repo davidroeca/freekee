@@ -17,7 +17,7 @@ pub fn fixture_password(name: &str) -> String {
     raw.trim_end_matches('\n').to_owned()
 }
 
-/// Shared helper: read → write → read, assert structural equivalence.
+/// Shared helper: read -> write -> read, assert structural equivalence.
 ///
 /// `Database` derives `PartialEq + Eq` via the upstream `keepass`
 /// library, so equality covers every parsed field (groups, entries,
@@ -41,9 +41,9 @@ pub fn assert_self_roundtrip(fixture: &str) {
     assert_eq!(original, reopened, "round-trip must preserve {fixture}");
 }
 
-/// Read → write → read → write → read; assert the second-round result
+/// Read -> write -> read -> write -> read; assert the second-round result
 /// equals the first-round result. Locks in the idempotency invariant
-/// from `docs/design.md` §10 (testing strategy, property tests).
+/// from `docs/design.md` section 10 (testing strategy, property tests).
 pub fn assert_roundtrip_idempotent(fixture: &str) {
     let path = fixture_dir(fixture).join("db.kdbx");
     let password = fixture_password(fixture);

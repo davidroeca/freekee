@@ -1,8 +1,8 @@
-//! Outer/inner cipher rules. See `docs/design.md` §7.1.
+//! Outer/inner cipher rules. See `docs/design.md` section 7.1.
 //!
 //! KDBX4 only allows AES-256, ChaCha20, and Twofish as outer ciphers
 //! (per `keepass::config::OuterCipherConfig`); AES-128 is not a valid
-//! KDBX4 option, contrary to design.md §7.1's example phrasing. The
+//! KDBX4 option, contrary to design.md section 7.1's example phrasing. The
 //! `weak-outer-cipher` rule therefore flags Twofish (legacy, not on
 //! KeePass's recommended list) at MEDIUM. The design.md phrasing is
 //! tracked for update in the doc-fixup PR.

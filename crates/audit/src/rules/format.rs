@@ -1,4 +1,4 @@
-//! KDBX format-version rule. See `docs/design.md` §7.1.
+//! KDBX format-version rule. See `docs/design.md` section 7.1.
 
 use crate::{Category, Finding, Severity};
 

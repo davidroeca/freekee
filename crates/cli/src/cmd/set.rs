@@ -1,4 +1,4 @@
-//! `freekee set` — upsert an entry. Field assignments are passed as
+//! `freekee set` - upsert an entry. Field assignments are passed as
 //! `key=value` positional arguments. `--gen-password` synthesizes a
 //! password via `core::PasswordPolicy`; the value is silent unless
 //! `--print-generated` is set, per the M1 plan.

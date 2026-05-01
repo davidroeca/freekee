@@ -93,7 +93,9 @@ impl Database {
             key = key.with_keyfile(&mut kf)?;
         }
         let inner = keepass::Database::open(&mut file, key)?;
-        Ok(Self { inner })
+        let mut db = Self { inner };
+        db.apply_keepassxc_defaults();
+        Ok(db)
     }
 
     /// Write this database to `path`. The credentials used to write
@@ -109,6 +111,50 @@ impl Database {
         }
         self.inner.save(&mut file, key)?;
         Ok(())
+    }
+
+    /// Fill in numeric fields that `cs_opt_fromstr` serializes as empty
+    /// elements when `None`, which KeePassXC rejects with "Invalid
+    /// number value". Called by `open` and `new_empty` so the invariant
+    /// holds for the lifetime of the database — `save` never needs to
+    /// mutate self.
+    ///
+    /// Upstream tracking: `keepass-rs` issue #311 (fix would be
+    /// `skip_serializing_if = "Option::is_none"` on every
+    /// `cs_opt_fromstr` field).
+    fn apply_keepassxc_defaults(&mut self) {
+        // Meta numeric fields
+        let meta = &mut self.inner.meta;
+        if meta.maintenance_history_days.is_none() {
+            meta.maintenance_history_days = Some(365);
+        }
+        if meta.master_key_change_rec.is_none() {
+            meta.master_key_change_rec = Some(-1);
+        }
+        if meta.master_key_change_force.is_none() {
+            meta.master_key_change_force = Some(-1);
+        }
+        if meta.history_max_items.is_none() {
+            meta.history_max_items = Some(10);
+        }
+        if meta.history_max_size.is_none() {
+            meta.history_max_size = Some(6 * 1024 * 1024);
+        }
+        if meta.recyclebin_enabled.is_none() {
+            meta.recyclebin_enabled = Some(true);
+        }
+        // IconID on groups and entries: `None` serializes as
+        // `<IconID></IconID>` which KeePassXC rejects.
+        self.inner.foreach_group_mut(|mut g| {
+            if g.icon().is_none() {
+                g.set_icon_builtin(0);
+            }
+        });
+        self.inner.foreach_entry_mut(|mut e| {
+            if e.icon().is_none() {
+                e.set_icon_builtin(0);
+            }
+        });
     }
 
     /// Number of entries directly under the root group (does not recurse).
@@ -196,6 +242,11 @@ impl Database {
     /// Create an empty database with the supplied configuration. The
     /// caller chooses cipher/KDF defaults; freekee's user-facing
     /// defaults live in `core::Vault::create`, not here.
+    ///
+    /// Populates `Meta` numeric fields with KeePassXC-compatible
+    /// defaults so the resulting file passes `keepassxc-cli db-info`.
+    /// Without this, `cs_opt_fromstr` serializes `None` as empty
+    /// strings that KeePassXC rejects with "Invalid number value".
     pub fn new_empty(template: NewDatabaseTemplate) -> Self {
         use keepass::config::{DatabaseConfig, InnerCipherConfig, KdfConfig, OuterCipherConfig};
         // `DatabaseConfig` is `#[non_exhaustive]`; start from the
@@ -218,9 +269,11 @@ impl Database {
             parallelism: template.kdf.parallelism,
             version: argon2::Version::Version13,
         };
-        Self {
+        let mut s = Self {
             inner: keepass::Database::with_config(config),
-        }
+        };
+        s.apply_keepassxc_defaults();
+        s
     }
 
     /// Add a new entry under the group identified by `path.groups`,
@@ -337,6 +390,29 @@ impl Database {
             version: argon2::Version::Version13,
         };
         Ok(())
+    }
+
+    /// Replace the outer (file-level) cipher. The next `save`
+    /// re-encrypts the entire file with the new cipher.
+    pub fn set_outer_cipher(&mut self, cipher: OuterCipher) {
+        use keepass::config::OuterCipherConfig as C;
+        self.inner.config.outer_cipher_config = match cipher {
+            OuterCipher::Aes256 => C::AES256,
+            OuterCipher::ChaCha20 => C::ChaCha20,
+            OuterCipher::Twofish => C::Twofish,
+        };
+    }
+
+    /// Replace the inner (protected-field) stream cipher. The next
+    /// `save` re-encrypts all protected field values with the new
+    /// cipher.
+    pub fn set_inner_cipher(&mut self, cipher: InnerCipher) {
+        use keepass::config::InnerCipherConfig as C;
+        self.inner.config.inner_cipher_config = match cipher {
+            InnerCipher::Plain => C::Plain,
+            InnerCipher::Salsa20 => C::Salsa20,
+            InnerCipher::ChaCha20 => C::ChaCha20,
+        };
     }
 
     /// Ensure every group named in `path.segments` exists, creating

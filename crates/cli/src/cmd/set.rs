@@ -11,6 +11,8 @@ use kdbx::{EntryDraft, EntryField, EntryFieldValue, EntryPath};
 
 #[derive(clap::Args)]
 pub struct Args {
+    /// Path to the .kdbx file, or set $FREEKEE_DB.
+    #[arg(long = "db", env = "FREEKEE_DB")]
     pub path: PathBuf,
     /// Slash-separated entry path (e.g. `Personal/email`).
     pub entry: String,

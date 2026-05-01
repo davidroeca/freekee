@@ -22,10 +22,13 @@ pub fn backup_path(original: &Path, now: DateTime<Utc>) -> PathBuf {
 }
 
 /// Outcome of a save-with-backup call. Returned from rotation paths
-/// so the CLI can tell the user where the backup landed (or that no
-/// backup was written).
+/// so the CLI can tell the user whether a rotation occurred and where
+/// the backup landed (or that no backup was written).
 #[derive(Debug, Clone, Default)]
 pub struct BackupOutcome {
+    /// `true` when the database was actually modified and re-saved.
+    /// `false` for no-op paths (e.g. `rotate_kdf` when already Argon2id).
+    pub changed: bool,
     pub backup_path: Option<PathBuf>,
 }
 

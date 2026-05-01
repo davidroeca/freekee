@@ -28,6 +28,9 @@ pub enum Error {
         "rotation verification failed: post-save reopen did not decrypt with the new credentials"
     )]
     RotationVerificationFailed,
+
+    #[error("at least one rotation target must be specified")]
+    NoRotationTarget,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

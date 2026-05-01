@@ -176,6 +176,7 @@ fn ls_lists_entries_with_group_path_prefix() {
 
     freekee()
         .arg("ls")
+        .arg("--db")
         .arg(&dest)
         .arg("--pass-stdin")
         .write_stdin("ls-pw\n")
@@ -193,6 +194,7 @@ fn get_default_does_not_show_password() {
 
     freekee()
         .arg("get")
+        .arg("--db")
         .arg(&dest)
         .arg("github")
         .arg("--pass-stdin")
@@ -215,6 +217,7 @@ fn get_with_show_surfaces_password_in_stdout() {
 
     freekee()
         .arg("get")
+        .arg("--db")
         .arg(&dest)
         .arg("github")
         .arg("--show")
@@ -225,6 +228,66 @@ fn get_with_show_surfaces_password_in_stdout() {
         .stdout(contains("gh-secret"));
 }
 
+fn has_clipboard() -> bool {
+    std::env::var_os("DISPLAY").is_some() || std::env::var_os("WAYLAND_DISPLAY").is_some()
+}
+
+#[test]
+fn get_clip_suppresses_hidden_message() {
+    // Requires a display to open a real clipboard. Skip silently on
+    // headless CI where arboard::Clipboard::new() will error out.
+    if !has_clipboard() {
+        return;
+    }
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    seed_vault(&dest, "clip-pw");
+
+    let assert = freekee()
+        .arg("get")
+        .arg("--db")
+        .arg(&dest)
+        .arg("github")
+        .arg("--clip")
+        .arg("--pass-stdin")
+        .write_stdin("clip-pw\n")
+        .assert()
+        .success();
+
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout).into_owned();
+    assert!(
+        !stdout.contains("gh-secret"),
+        "--clip must not print the password to stdout; stdout was: {stdout}"
+    );
+    assert!(
+        !stdout.contains("<hidden"),
+        "--clip must suppress the 'hidden' prompt; stdout was: {stdout}"
+    );
+}
+
+#[test]
+fn get_clip_and_show_both_work_together() {
+    if !has_clipboard() {
+        return;
+    }
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    seed_vault(&dest, "clipshow-pw");
+
+    freekee()
+        .arg("get")
+        .arg("--db")
+        .arg(&dest)
+        .arg("github")
+        .arg("--clip")
+        .arg("--show")
+        .arg("--pass-stdin")
+        .write_stdin("clipshow-pw\n")
+        .assert()
+        .success()
+        .stdout(contains("gh-secret")); // --show prints it
+}
+
 #[test]
 fn get_returns_error_for_missing_entry() {
     let tmp = tempfile::tempdir().unwrap();
@@ -233,6 +296,7 @@ fn get_returns_error_for_missing_entry() {
 
     freekee()
         .arg("get")
+        .arg("--db")
         .arg(&dest)
         .arg("does-not-exist")
         .arg("--pass-stdin")
@@ -249,6 +313,7 @@ fn history_reports_zero_for_freshly_seeded_entry() {
 
     freekee()
         .arg("history")
+        .arg("--db")
         .arg(&dest)
         .arg("github")
         .arg("--pass-stdin")
@@ -266,6 +331,7 @@ fn set_creates_a_new_entry_with_field_assignments() {
 
     freekee()
         .arg("set")
+        .arg("--db")
         .arg(&dest)
         .arg("Personal/email")
         .arg("username=alice@example.com")
@@ -293,6 +359,7 @@ fn set_gen_password_does_not_echo_by_default() {
 
     let assert = freekee()
         .arg("set")
+        .arg("--db")
         .arg(&dest)
         .arg("github")
         .arg("--gen-password")
@@ -329,6 +396,7 @@ fn set_gen_password_with_print_flag_echoes_generated_value() {
 
     let assert = freekee()
         .arg("set")
+        .arg("--db")
         .arg(&dest)
         .arg("github")
         .arg("--gen-password")
@@ -365,6 +433,7 @@ fn rm_removes_entry_and_writes_deleted_object() {
 
     freekee()
         .arg("rm")
+        .arg("--db")
         .arg(&dest)
         .arg("github")
         .arg("--pass-stdin")
@@ -391,6 +460,7 @@ fn mv_renames_an_entry_in_place() {
 
     freekee()
         .arg("mv")
+        .arg("--db")
         .arg(&dest)
         .arg("github")
         .arg("github-renamed")
@@ -425,6 +495,7 @@ fn rotate_passphrase_changes_credentials_and_writes_backup() {
     freekee()
         .arg("rotate")
         .arg("passphrase")
+        .arg("--db")
         .arg(&dest)
         .arg("--pass-stdin")
         .arg("--new-pass-stdin")
@@ -455,6 +526,7 @@ fn rotate_passphrase_no_backup_skips_backup() {
     freekee()
         .arg("rotate")
         .arg("passphrase")
+        .arg("--db")
         .arg(&dest)
         .arg("--no-backup")
         .arg("--pass-stdin")
@@ -481,6 +553,7 @@ fn rotate_kdf_params_changes_argon2_settings() {
     freekee()
         .arg("rotate")
         .arg("kdf-params")
+        .arg("--db")
         .arg(&dest)
         .arg("--memory")
         .arg("16")
@@ -509,6 +582,54 @@ fn rotate_kdf_params_changes_argon2_settings() {
 }
 
 #[test]
+fn rotate_kdf_noop_prints_already_argon2id() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    seed_vault(&dest, "pw");
+
+    freekee()
+        .arg("rotate")
+        .arg("kdf")
+        .arg("--db")
+        .arg(&dest)
+        .arg("--pass-stdin")
+        .write_stdin("pw\n")
+        .assert()
+        .success()
+        .stdout(contains("Already using Argon2id"));
+}
+
+#[test]
+fn rotate_kdf_aeskdf_fixture_upgrades_and_reports_rotated() {
+    use std::fs;
+    let fixture_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/roundtrip/fixtures/kdbx40-legacy");
+    let password = fs::read_to_string(fixture_dir.join("password.txt"))
+        .unwrap()
+        .trim_end_matches('\n')
+        .to_owned();
+
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("copy.kdbx");
+    fs::copy(fixture_dir.join("db.kdbx"), &dest).unwrap();
+
+    freekee()
+        .arg("rotate")
+        .arg("kdf")
+        .arg("--db")
+        .arg(&dest)
+        .arg("--no-backup")
+        .arg("--pass-stdin")
+        .write_stdin(format!("{password}\n"))
+        .assert()
+        .success()
+        .stdout(contains("Rotated KDF to Argon2id"));
+
+    let db = kdbx::Database::open(&dest, &password, None).unwrap();
+    assert!(matches!(db.kdf(), kdbx::Kdf::Argon2id { .. }));
+}
+
+#[test]
 fn rotate_entry_replaces_password_silently_unless_print_flag() {
     let tmp = tempfile::tempdir().unwrap();
     let dest = tmp.path().join("v.kdbx");
@@ -518,6 +639,7 @@ fn rotate_entry_replaces_password_silently_unless_print_flag() {
     let assert = freekee()
         .arg("rotate")
         .arg("entry")
+        .arg("--db")
         .arg(&dest)
         .arg("github")
         .arg("--length")
@@ -558,6 +680,7 @@ fn rotate_entry_print_generated_flag_echoes_new_password() {
     let assert = freekee()
         .arg("rotate")
         .arg("entry")
+        .arg("--db")
         .arg(&dest)
         .arg("github")
         .arg("--length")
@@ -603,6 +726,7 @@ fn set_field_sentinel_reads_password_from_stdin() {
     let secret = "stdin-only-secret-7c3";
     freekee()
         .arg("set")
+        .arg("--db")
         .arg(&dest)
         .arg("github")
         .arg("password=-")
@@ -629,6 +753,7 @@ fn set_field_sentinel_supports_multiple_fields_in_order() {
 
     freekee()
         .arg("set")
+        .arg("--db")
         .arg(&dest)
         .arg("github")
         .arg("username=-")
@@ -662,6 +787,7 @@ fn set_field_sentinel_does_not_consume_extra_lines() {
     let intended = "the-real-value";
     freekee()
         .arg("set")
+        .arg("--db")
         .arg(&dest)
         .arg("github")
         .arg("password=-")
@@ -748,6 +874,7 @@ fn rotate_keyfile_add_via_cli_makes_keyfile_required() {
     freekee()
         .arg("rotate")
         .arg("keyfile")
+        .arg("--db")
         .arg(&dest)
         .arg("--new-keyfile")
         .arg(&new_kf)
@@ -776,6 +903,7 @@ fn rotate_keyfile_remove_via_cli_makes_keyfile_optional() {
     freekee()
         .arg("rotate")
         .arg("keyfile")
+        .arg("--db")
         .arg(&dest)
         .arg("--new-keyfile")
         .arg(&kf)
@@ -788,6 +916,7 @@ fn rotate_keyfile_remove_via_cli_makes_keyfile_optional() {
     freekee()
         .arg("rotate")
         .arg("keyfile")
+        .arg("--db")
         .arg(&dest)
         .arg("--keyfile")
         .arg(&kf)
@@ -817,6 +946,7 @@ fn rotate_keyfile_with_wrong_current_keyfile_errors_out() {
     freekee()
         .arg("rotate")
         .arg("keyfile")
+        .arg("--db")
         .arg(&dest)
         .arg("--new-keyfile")
         .arg(&real_kf)
@@ -829,6 +959,7 @@ fn rotate_keyfile_with_wrong_current_keyfile_errors_out() {
     freekee()
         .arg("rotate")
         .arg("keyfile")
+        .arg("--db")
         .arg(&dest)
         .arg("--keyfile")
         .arg(&wrong_kf)
@@ -867,4 +998,21 @@ fn init_chacha20_cipher_flag_is_respected() {
 
     let db = kdbx::Database::open(&dest, "cc20-pw", None).unwrap();
     assert!(matches!(db.outer_cipher(), kdbx::OuterCipher::ChaCha20));
+}
+
+#[test]
+fn rotate_cipher_with_no_target_errors_out() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    seed_vault(&dest, "pw");
+
+    freekee()
+        .arg("rotate")
+        .arg("cipher")
+        .arg("--db")
+        .arg(&dest)
+        .arg("--pass-stdin")
+        .write_stdin("pw\n")
+        .assert()
+        .failure();
 }

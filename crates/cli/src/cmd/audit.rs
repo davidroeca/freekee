@@ -5,6 +5,8 @@ use ::audit::{AuditConfig, CompositeKeyInfo, Finding, Severity};
 
 #[derive(clap::Args)]
 pub struct Args {
+    /// Path to the .kdbx file, or set $FREEKEE_DB.
+    #[arg(long = "db", env = "FREEKEE_DB")]
     pub path: PathBuf,
     /// Path to a keyfile (in addition to the passphrase).
     #[arg(long)]

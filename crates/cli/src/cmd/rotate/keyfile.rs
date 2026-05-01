@@ -12,6 +12,8 @@ use freekee_core::{RotateOpts, Vault};
 
 #[derive(clap::Args)]
 pub struct Args {
+    /// Path to the .kdbx file, or set $FREEKEE_DB.
+    #[arg(long = "db", env = "FREEKEE_DB")]
     pub path: PathBuf,
     /// New keyfile to bind to the vault. Mutually exclusive with
     /// `--remove`.

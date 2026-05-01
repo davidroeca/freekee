@@ -44,6 +44,7 @@ fn info_on_empty_fixture_prints_metadata_no_secrets() {
     let path = fixtures("empty").join("db.kdbx");
     freekee()
         .arg("info")
+        .arg("--db")
         .arg(&path)
         .arg("--pass-stdin")
         .write_stdin(format!("{FIXTURE_PASSWORD}\n"))
@@ -59,6 +60,7 @@ fn verify_on_clean_fixture_exits_zero() {
     let path = fixtures("empty").join("db.kdbx");
     freekee()
         .arg("verify")
+        .arg("--db")
         .arg(&path)
         .arg("--pass-stdin")
         .write_stdin(format!("{FIXTURE_PASSWORD}\n"))
@@ -75,6 +77,7 @@ fn audit_on_empty_fixture_surfaces_only_passphrase_only_info() {
     let path = fixtures("empty").join("db.kdbx");
     freekee()
         .arg("audit")
+        .arg("--db")
         .arg(&path)
         .arg("--pass-stdin")
         .write_stdin(format!("{FIXTURE_PASSWORD}\n"))
@@ -89,6 +92,7 @@ fn audit_on_kdbx3_legacy_succeeds_without_strict() {
     let path = fixtures("kdbx3-legacy").join("db.kdbx");
     freekee()
         .arg("audit")
+        .arg("--db")
         .arg(&path)
         .arg("--pass-stdin")
         .write_stdin(format!("{FIXTURE_PASSWORD}\n"))
@@ -102,6 +106,7 @@ fn audit_on_kdbx3_legacy_with_strict_exits_nonzero() {
     let path = fixtures("kdbx3-legacy").join("db.kdbx");
     freekee()
         .arg("audit")
+        .arg("--db")
         .arg(&path)
         .arg("--strict")
         .arg("--pass-stdin")
@@ -116,6 +121,7 @@ fn verify_with_keyfile_succeeds() {
     let dir = fixtures("with-keyfile");
     freekee()
         .arg("verify")
+        .arg("--db")
         .arg(dir.join("db.kdbx"))
         .arg("--keyfile")
         .arg(dir.join("keyfile.bin"))
@@ -131,6 +137,7 @@ fn audit_with_keyfile_suppresses_passphrase_only_finding() {
     let dir = fixtures("with-keyfile");
     freekee()
         .arg("audit")
+        .arg("--db")
         .arg(dir.join("db.kdbx"))
         .arg("--keyfile")
         .arg(dir.join("keyfile.bin"))
@@ -146,6 +153,7 @@ fn audit_with_json_outputs_machine_readable() {
     let path = fixtures("empty").join("db.kdbx");
     freekee()
         .arg("audit")
+        .arg("--db")
         .arg(&path)
         .arg("--json")
         .arg("--pass-stdin")

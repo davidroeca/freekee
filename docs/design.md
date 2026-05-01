@@ -144,7 +144,7 @@ Every finding includes a `remediation` field with the exact CLI command that fix
   better resistance to GPU/ASIC attacks and is the current
   KeePass recommendation.
   Source: https://keepass.info/help/kb/kdbx_4.html
-  Fix:    freekee rotate kdf path/to/db.kdbx --to argon2id
+  Fix:    freekee rotate kdf --db path/to/db.kdbx
 ```
 
 ### 7.3 Audit is read-only
@@ -156,33 +156,33 @@ The audit crate never mutates a database. It reads, analyzes, returns findings. 
 ```bash
 # Lifecycle
 freekee init [path]
-freekee info <path>                  # version, cipher, KDF, recipient summary
-freekee verify <path>                # integrity check, no decrypt of payload
+freekee info --db <path>             # version, cipher, KDF, recipient summary
+freekee verify --db <path>           # integrity check, no decrypt of payload
 
 # Inspection
-freekee ls <path> [pattern]
-freekee get <path> <entry>
-freekee history <path> <entry>
+freekee ls --db <path> [pattern]
+freekee get --db <path> <entry>
+freekee history --db <path> <entry>
 
 # Mutation
-freekee set <path> <entry> [--gen-password] [--length N]
-freekee rm <path> <entry>
-freekee mv <path> <entry> <new-path>
+freekee set --db <path> <entry> [--gen-password] [--length N]
+freekee rm --db <path> <entry>
+freekee mv --db <path> <entry> <new-path>
 
 # Audit (the differentiator)
-freekee audit <path> [--strict] [--hibp] [--json]
-freekee audit <path> --fix-interactive       # walk through findings, prompt to fix
-freekee audit-watch <path>                   # re-audit on file change
+freekee audit --db <path> [--strict] [--hibp] [--json]
+freekee audit --db <path> --fix-interactive  # walk through findings, prompt to fix
+freekee audit-watch --db <path>              # re-audit on file change
 
 # Rotation
-freekee rotate passphrase <path>
-freekee rotate kdf <path> --to argon2id
-freekee rotate kdf-params <path> [--memory MIB] [--iterations N] [--parallelism P]
-freekee rotate cipher <path> --to chacha20
-freekee rotate kdbx-version <path> --to 4
-freekee rotate keyfile <path> [--remove | --new-keyfile <new-keyfile>]
-freekee rotate entry <path> <entry>          # regenerate single entry's password
-freekee rotate entries <path> --where 'reused | stale | weak'
+freekee rotate passphrase --db <path>
+freekee rotate kdf --db <path> --to argon2id
+freekee rotate kdf-params --db <path> [--memory MIB] [--iterations N] [--parallelism P]
+freekee rotate cipher --db <path> --to chacha20
+freekee rotate kdbx-version --db <path> --to 4
+freekee rotate keyfile --db <path> [--remove | --new-keyfile <new-keyfile>]
+freekee rotate entry --db <path> <entry>     # regenerate single entry's password
+freekee rotate entries --db <path> --where 'reused | stale | weak'
                                              # bulk-regenerate matching entries
 
 # Sync hygiene
@@ -192,6 +192,7 @@ freekee merge <a> <b> -o <out> [--base <c>]
 
 Conventions:
 
+- `--db <path>` names the vault file. Set `$FREEKEE_DB` once to omit `--db` in every command.
 - Entry paths use `Group/Subgroup/EntryTitle`.
 - Passphrases come from `$FREEKEE_PASS`, prompt, or stdin (`--pass-stdin`).
 - Field values for `set` accept a `field=-` sentinel that reads the value from one line of stdin (after the passphrase line, in command-line order). Use this for assignments that would otherwise leak a secret into shell history or `ps`.

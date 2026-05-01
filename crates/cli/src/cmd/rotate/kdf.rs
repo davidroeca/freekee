@@ -1,4 +1,5 @@
-//! `freekee rotate passphrase` - change the master passphrase.
+//! `freekee rotate kdf` - switch the key derivation function from
+//! AES-KDF to Argon2id. No-op when the database already uses Argon2id.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -15,30 +16,26 @@ pub struct Args {
     pub no_backup: bool,
     #[arg(long)]
     pub keyfile: Option<PathBuf>,
-    /// Read the *current* passphrase from the first line of stdin.
     #[arg(long)]
     pub pass_stdin: bool,
-    /// Read the *new* passphrase from the next line of stdin.
-    #[arg(long)]
-    pub new_pass_stdin: bool,
 }
 
 pub fn run(args: Args) -> anyhow::Result<ExitCode> {
     let pass = crate::cmd::read_passphrase(args.pass_stdin)?;
-    let new_pass = crate::cmd::read_new_passphrase(args.new_pass_stdin)?;
     let mut vault = Vault::open(&args.path, pass, args.keyfile.as_deref())?;
 
-    let outcome = vault.rotate_passphrase(
-        new_pass,
-        RotateOpts {
-            backup: !args.no_backup,
-        },
-    )?;
+    let outcome = vault.rotate_kdf(RotateOpts {
+        backup: !args.no_backup,
+    })?;
 
-    if let Some(b) = outcome.backup_path {
-        println!("Rotated. Backup at {}", b.display());
+    if outcome.changed {
+        if let Some(ref path) = outcome.backup_path {
+            println!("Rotated KDF to Argon2id. Backup at {}", path.display());
+        } else {
+            println!("Rotated KDF to Argon2id.");
+        }
     } else {
-        println!("Rotated.");
+        println!("Already using Argon2id; no change needed.");
     }
     Ok(ExitCode::SUCCESS)
 }

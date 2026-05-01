@@ -10,6 +10,8 @@ use kdbx::Argon2idParams;
 
 #[derive(clap::Args)]
 pub struct Args {
+    /// Path to the .kdbx file, or set $FREEKEE_DB.
+    #[arg(long = "db", env = "FREEKEE_DB")]
     pub path: PathBuf,
     /// Argon2id memory in MiB. Defaults to the existing value.
     #[arg(long)]

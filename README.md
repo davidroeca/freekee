@@ -16,19 +16,21 @@ A CLI password manager built on standard KDBX4, compatible with KeePassXC, Stron
 ## What works today
 
 ```sh
+export FREEKEE_DB=~/vault.kdbx                # set once, omit --db everywhere
+
 freekee init db.kdbx                          # create a new database
-freekee ls db.kdbx                            # list entries
-freekee get db.kdbx Personal/email            # show entry fields
-freekee get db.kdbx Personal/email --show     # reveal password
-freekee set db.kdbx Personal/email url=https://example.com
-freekee set db.kdbx Personal/email --gen-password --print-generated
-freekee history db.kdbx Personal/email        # show password history
-freekee mv db.kdbx Personal/email Work/email
-freekee rm db.kdbx Personal/email
-freekee rotate passphrase db.kdbx
-freekee rotate kdf-params db.kdbx --memory 128
-freekee rotate entry db.kdbx Personal/email
-freekee audit db.kdbx                         # check ciphers, KDF, entry strength
+freekee ls --db db.kdbx                       # list entries
+freekee get --db db.kdbx Personal/email       # show entry fields
+freekee get --db db.kdbx Personal/email --show  # reveal password
+freekee set --db db.kdbx Personal/email url=https://example.com
+freekee set --db db.kdbx Personal/email --gen-password --print-generated
+freekee history --db db.kdbx Personal/email   # show password history
+freekee mv --db db.kdbx Personal/email Work/email
+freekee rm --db db.kdbx Personal/email
+freekee rotate passphrase --db db.kdbx
+freekee rotate kdf-params --db db.kdbx --memory 128
+freekee rotate entry --db db.kdbx Personal/email
+freekee audit --db db.kdbx                    # check ciphers, KDF, entry strength
 ```
 
 Every mutating command backs up the database before writing and rolls back on failure.

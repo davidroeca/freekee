@@ -262,6 +262,61 @@ impl Vault {
         }
     }
 
+    /// Whether the database's KDF is already Argon2id.
+    pub fn kdf_is_argon2id(&self) -> bool {
+        matches!(self.db.kdf(), kdbx::Kdf::Argon2id { .. })
+    }
+
+    /// Current outer cipher used by this database.
+    pub fn outer_cipher(&self) -> kdbx::OuterCipher {
+        self.db.outer_cipher()
+    }
+
+    /// Current inner cipher used by this database.
+    pub fn inner_cipher(&self) -> kdbx::InnerCipher {
+        self.db.inner_cipher()
+    }
+
+    /// Rotate the outer and/or inner cipher. Pass `None` for either
+    /// argument to leave it unchanged. At least one must be `Some`.
+    /// Routes through the shared backup / save / verify / rollback tail.
+    pub fn rotate_cipher(
+        &mut self,
+        outer: Option<kdbx::OuterCipher>,
+        inner: Option<kdbx::InnerCipher>,
+        opts: RotateOpts,
+    ) -> Result<BackupOutcome> {
+        if outer.is_none() && inner.is_none() {
+            return Err(Error::NoRotationTarget);
+        }
+        if let Some(c) = outer {
+            self.db.set_outer_cipher(c);
+        }
+        if let Some(c) = inner {
+            self.db.set_inner_cipher(c);
+        }
+        let pw = self.password.clone();
+        self.save_and_verify_with_backup(opts.backup, &pw)
+    }
+
+    /// Rotate the KDF type to Argon2id. If the database already uses
+    /// Argon2id, this is a no-op (returns `BackupOutcome { backup_path:
+    /// None }`). For legacy AES-KDF databases, the KDF is replaced with
+    /// Argon2id using the workspace-default parameters from
+    /// `DEFAULT_TEMPLATE`. Routes through the shared backup / save /
+    /// verify / rollback tail.
+    pub fn rotate_kdf(&mut self, opts: RotateOpts) -> Result<BackupOutcome> {
+        if self.kdf_is_argon2id() {
+            return Ok(BackupOutcome {
+                changed: false,
+                backup_path: None,
+            });
+        }
+        self.db.set_kdf_params(crate::DEFAULT_TEMPLATE.kdf)?;
+        let pw = self.password.clone();
+        self.save_and_verify_with_backup(opts.backup, &pw)
+    }
+
     /// Generate a fresh password for the entry at `path` using
     /// `policy`, then save with the existing passphrase. The prior
     /// password lands in entry history (via `set_field` ->
@@ -373,6 +428,9 @@ impl Vault {
         }
         let backup_path = guard.path().map(Path::to_path_buf);
         guard.commit();
-        Ok(BackupOutcome { backup_path })
+        Ok(BackupOutcome {
+            changed: true,
+            backup_path,
+        })
     }
 }

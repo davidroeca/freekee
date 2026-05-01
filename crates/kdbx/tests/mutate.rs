@@ -362,3 +362,63 @@ fn save_without_keyfile_remains_passphrase_only() {
 
     Database::open(&dest, "pw", None).expect("passphrase-only round trip still works");
 }
+
+// ---------------------------------------------------------------------------
+// keepassxc-cli compatibility.
+//
+// `Database::new_empty` patches Meta fields that KeePassXC expects to be
+// numeric. Without these patches, `cs_opt_fromstr` serializes `None`
+// as empty strings, which KeePassXC rejects with "Invalid number
+// value".
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "keepassxc-verify")]
+#[test]
+fn keepassxc_can_open_file_created_by_new_empty() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("init.kdbx");
+    let mut db = Database::new_empty(tiny_template());
+    db.add_entry(
+        EntryPath {
+            groups: &[],
+            title: "Test",
+        },
+        EntryDraft {
+            username: Some("alice"),
+            password: Some("secret123"),
+            ..EntryDraft::default()
+        },
+    )
+    .unwrap();
+    db.save(&dest, "init-test-pw", None).unwrap();
+
+    // Verify our own code can round-trip the database.
+    let reopened = Database::open(&dest, "init-test-pw", None).unwrap();
+    assert_eq!(
+        reopened.root_entry_count(),
+        1,
+        "should have 1 entry after round-trip"
+    );
+
+    let mut child = std::process::Command::new("keepassxc-cli")
+        .arg("db-info")
+        .arg(&dest)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("keepassxc-cli must be on PATH (feature `keepassxc-verify`)");
+    use std::io::Write;
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin")
+        .write_all(b"init-test-pw\n")
+        .expect("write password");
+    let output = child.wait_with_output().expect("wait keepassxc-cli");
+    assert!(
+        output.status.success(),
+        "keepassxc-cli rejected init-created file: stderr={}",
+        String::from_utf8_lossy(&output.stderr),
+    );
+}

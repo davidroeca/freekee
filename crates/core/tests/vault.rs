@@ -973,3 +973,49 @@ fn current_argon2id_params_matches_template_used_at_create() {
         .expect("tiny_template uses Argon2id, not legacy AES-KDF");
     assert_eq!(params, tiny_template().kdf);
 }
+
+#[test]
+fn rotate_kdf_noop_when_already_argon2id() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    Vault::create(
+        &dest,
+        Zeroizing::new("pw".to_owned()),
+        None,
+        tiny_template(),
+        false,
+    )
+    .unwrap();
+
+    let mut vault = Vault::open(&dest, Zeroizing::new("pw".to_owned()), None).unwrap();
+    let outcome = vault.rotate_kdf(RotateOpts { backup: true }).unwrap();
+
+    assert!(!outcome.changed, "no-op: already on Argon2id");
+    assert!(outcome.backup_path.is_none(), "no-op: no backup written");
+}
+
+#[test]
+fn rotate_kdf_legacy_aeskdf_upgrades_and_reports_changed() {
+    let fixture = "kdbx40-legacy";
+    let (_tmp, dest) = copied_fixture(fixture);
+    let password = fixture_password(fixture);
+
+    let mut vault = Vault::open(&dest, Zeroizing::new(password), None).unwrap();
+    let outcome = vault.rotate_kdf(RotateOpts { backup: false }).unwrap();
+
+    assert!(outcome.changed, "AES-KDF -> Argon2id is a real rotation");
+    assert!(outcome.backup_path.is_none(), "backup disabled");
+}
+
+#[test]
+fn rotate_kdf_legacy_aeskdf_with_backup_reports_changed_and_backup_path() {
+    let fixture = "kdbx40-legacy";
+    let (_tmp, dest) = copied_fixture(fixture);
+    let password = fixture_password(fixture);
+
+    let mut vault = Vault::open(&dest, Zeroizing::new(password), None).unwrap();
+    let outcome = vault.rotate_kdf(RotateOpts { backup: true }).unwrap();
+
+    assert!(outcome.changed, "AES-KDF -> Argon2id is a real rotation");
+    assert!(outcome.backup_path.is_some(), "backup enabled and written");
+}

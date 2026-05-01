@@ -8,6 +8,8 @@ use freekee_core::Vault;
 
 #[derive(clap::Args)]
 pub struct Args {
+    /// Path to the .kdbx file, or set $FREEKEE_DB.
+    #[arg(long = "db", env = "FREEKEE_DB")]
     pub path: PathBuf,
     /// Optional case-insensitive substring; only entries whose full
     /// path contains it are listed.

@@ -66,7 +66,7 @@ fn no_canary_substrings_in_any_command_output() {
         vec!["audit", "--strict"],
     ] {
         let mut cmd = freekee();
-        cmd.args(&argv).arg(&canary).arg("--pass-stdin");
+        cmd.args(&argv).arg("--db").arg(&canary).arg("--pass-stdin");
         let out = cmd
             .write_stdin(format!("{CANARY_PASSPHRASE}\n"))
             .output()
@@ -79,7 +79,7 @@ fn no_canary_substrings_in_any_command_output() {
     // also not echoed (it should never be reflected to the user).
     for sub in ["info", "verify", "audit"] {
         let mut cmd = freekee();
-        cmd.arg(sub).arg(&canary).arg("--pass-stdin");
+        cmd.arg(sub).arg("--db").arg(&canary).arg("--pass-stdin");
         let out = cmd
             .write_stdin(format!("{WRONG_PASSPHRASE}\n"))
             .output()
@@ -104,12 +104,13 @@ fn no_canary_substrings_in_any_command_output() {
         vec!["ls"],
         vec!["history", "canary"],
         vec!["get", "canary"], // no --show: must still hide the password
+        vec!["get", "--clip", "canary"], // --clip: no stdout print; clipboard may fail on CI
     ] {
         let dir = tempfile::tempdir().expect("tempdir");
         let canary = dir.path().join("canary.kdbx");
         build_canary(&canary);
         let mut cmd = freekee();
-        cmd.args(&argv).arg(&canary).arg("--pass-stdin");
+        cmd.args(&argv).arg("--db").arg(&canary).arg("--pass-stdin");
         let out = cmd
             .write_stdin(format!("{CANARY_PASSPHRASE}\n"))
             .output()
@@ -127,6 +128,7 @@ fn no_canary_substrings_in_any_command_output() {
         build_canary(&canary);
         let out = freekee()
             .arg("get")
+            .arg("--db")
             .arg(&canary)
             .arg("canary")
             .arg("--show")
@@ -167,6 +169,7 @@ fn no_canary_substrings_in_any_command_output() {
         let new_canary = "NEWLY_SET_CANARY_VALUE_27a9f1c4";
         let out = freekee()
             .arg("set")
+            .arg("--db")
             .arg(&canary)
             .arg("canary")
             .arg(format!("password={new_canary}"))
@@ -196,6 +199,7 @@ fn no_canary_substrings_in_any_command_output() {
         build_canary(&canary);
         let out = freekee()
             .arg("set")
+            .arg("--db")
             .arg(&canary)
             .arg("canary")
             .arg("--gen-password")
@@ -235,6 +239,7 @@ fn no_canary_substrings_in_any_command_output() {
         build_canary(&canary);
         let mut cmd = freekee();
         cmd.args(&argv[..1])
+            .arg("--db")
             .arg(&canary)
             .args(&argv[1..])
             .arg("--pass-stdin");
@@ -257,6 +262,7 @@ fn no_canary_substrings_in_any_command_output() {
         let out = freekee()
             .arg("rotate")
             .arg("passphrase")
+            .arg("--db")
             .arg(&canary)
             .arg("--pass-stdin")
             .arg("--new-pass-stdin")
@@ -293,6 +299,7 @@ fn no_canary_substrings_in_any_command_output() {
         let out = freekee()
             .arg("rotate")
             .arg("entry")
+            .arg("--db")
             .arg(&canary)
             .arg("canary")
             .arg("--length")
@@ -336,6 +343,7 @@ fn no_canary_substrings_in_any_command_output() {
         let out = freekee()
             .arg("rotate")
             .arg("entry")
+            .arg("--db")
             .arg(&canary)
             .arg("canary")
             .arg("--length")
@@ -383,6 +391,7 @@ fn no_canary_substrings_in_any_command_output() {
         let stdin_canary = "STDIN_SENTINEL_CANARY_4f8e3b21";
         let out = freekee()
             .arg("set")
+            .arg("--db")
             .arg(&canary)
             .arg("canary")
             .arg("password=-")
@@ -452,6 +461,7 @@ fn no_canary_substrings_in_any_command_output() {
         let out = freekee()
             .arg("rotate")
             .arg("keyfile")
+            .arg("--db")
             .arg(&canary)
             .arg("--new-keyfile")
             .arg(&kf)
@@ -480,6 +490,7 @@ fn no_canary_substrings_in_any_command_output() {
         freekee()
             .arg("rotate")
             .arg("keyfile")
+            .arg("--db")
             .arg(&canary)
             .arg("--new-keyfile")
             .arg(&kf)
@@ -491,6 +502,7 @@ fn no_canary_substrings_in_any_command_output() {
         let out = freekee()
             .arg("rotate")
             .arg("keyfile")
+            .arg("--db")
             .arg(&canary)
             .arg("--keyfile")
             .arg(&kf)

@@ -31,22 +31,21 @@ pub fn run(args: Args) -> anyhow::Result<ExitCode> {
     let mut scratch = Vec::new();
     let entry_path: EntryPath<'_> = super::entry_path_from(&segments, &mut scratch);
 
-    let entry = vault
-        .db()
-        .entry_by_path(entry_path)
+    let view = vault
+        .get(entry_path)
         .ok_or_else(|| anyhow::anyhow!("entry not found: {}", args.entry))?;
 
-    println!("Title:    {}", entry.title().unwrap_or(""));
-    if let Some(u) = entry.username() {
+    println!("Title:    {}", view.title.as_deref().unwrap_or(""));
+    if let Some(u) = view.username.as_deref() {
         println!("Username: {u}");
     }
-    if let Some(u) = entry.url() {
+    if let Some(u) = view.url.as_deref() {
         println!("URL:      {u}");
     }
     if args.show {
         // Carve-out: the only path allowed to surface a password.
-        if let Some(p) = entry.password() {
-            println!("Password: {p}");
+        if let Some(p) = vault.get_password(entry_path) {
+            println!("Password: {}", p.as_str());
         }
     } else {
         println!("Password: <hidden - pass --show to reveal>");

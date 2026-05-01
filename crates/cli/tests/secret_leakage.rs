@@ -98,9 +98,8 @@ fn no_canary_substrings_in_any_command_output() {
         assert_no_canary_in(&format!("{argv:?}"), &out.stdout, &out.stderr);
     }
 
-    // Mutating + read-extra commands added in M1. Each runs against a
-    // *fresh* canary so a leak in one command can't contaminate the
-    // next test's assertion.
+    // Mutating + read-extra commands. Each runs against a *fresh* canary so
+    // a leak in one command can't contaminate the next test's assertion.
     for argv in [
         vec!["ls"],
         vec!["history", "canary"],
@@ -372,4 +371,157 @@ fn no_canary_substrings_in_any_command_output() {
             "master passphrase must not leak even with --print-generated"
         );
     }
+
+    // `set field=-` stdin sentinel: the assigned value is read from
+    // stdin instead of argv, but the same no-leak rule applies. Both
+    // the master passphrase canary and the new value canary must be
+    // absent from stdout/stderr.
+    {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let canary = dir.path().join("canary.kdbx");
+        build_canary(&canary);
+        let stdin_canary = "STDIN_SENTINEL_CANARY_4f8e3b21";
+        let out = freekee()
+            .arg("set")
+            .arg(&canary)
+            .arg("canary")
+            .arg("password=-")
+            .arg("--pass-stdin")
+            .write_stdin(format!("{CANARY_PASSPHRASE}\n{stdin_canary}\n"))
+            .output()
+            .expect("run set password=-");
+        assert!(
+            out.status.success(),
+            "set password=- must succeed; stderr: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_no_canary_in("set password=- (stdin)", &out.stdout, &out.stderr);
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !stdout.contains(stdin_canary),
+            "set password=- must not echo the stdin-supplied value: stdout was: {stdout}"
+        );
+        assert!(
+            !stderr.contains(stdin_canary),
+            "set password=- must not echo the stdin-supplied value to stderr: stderr was: {stderr}"
+        );
+    }
+
+    // `init --keyfile`: the master passphrase must not appear anywhere
+    // in stdout/stderr, and the keyfile path itself is fine to surface
+    // (it's a filesystem path, not a secret). Init writes a brand-new
+    // file, so we use the standard CANARY_PASSPHRASE as the new
+    // master.
+    {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let dest = dir.path().join("init-kf.kdbx");
+        let kf = dir.path().join("init.key");
+        write_random_canary_keyfile(&kf);
+        let out = freekee()
+            .arg("init")
+            .arg(&dest)
+            .arg("--keyfile")
+            .arg(&kf)
+            .arg("--memory")
+            .arg("8")
+            .arg("--iterations")
+            .arg("1")
+            .arg("--parallelism")
+            .arg("1")
+            .arg("--pass-stdin")
+            .write_stdin(format!("{CANARY_PASSPHRASE}\n"))
+            .output()
+            .expect("run init --keyfile");
+        assert!(
+            out.status.success(),
+            "init --keyfile must succeed; stderr: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_no_canary_in("init --keyfile", &out.stdout, &out.stderr);
+    }
+
+    // `rotate keyfile --new-keyfile`: master passphrase canary must
+    // stay out of all output.
+    {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let canary = dir.path().join("canary.kdbx");
+        build_canary(&canary);
+        let kf = dir.path().join("k.key");
+        write_random_canary_keyfile(&kf);
+        let out = freekee()
+            .arg("rotate")
+            .arg("keyfile")
+            .arg(&canary)
+            .arg("--new-keyfile")
+            .arg(&kf)
+            .arg("--pass-stdin")
+            .write_stdin(format!("{CANARY_PASSPHRASE}\n"))
+            .output()
+            .expect("run rotate keyfile --new-keyfile");
+        assert!(
+            out.status.success(),
+            "rotate keyfile add must succeed; stderr: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_no_canary_in("rotate keyfile add", &out.stdout, &out.stderr);
+    }
+
+    // `rotate keyfile --remove`: master passphrase canary must stay
+    // out of all output. Setup adds a keyfile first via the same
+    // command, then removes it.
+    {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let canary = dir.path().join("canary.kdbx");
+        build_canary(&canary);
+        let kf = dir.path().join("k.key");
+        write_random_canary_keyfile(&kf);
+        // Setup: bind a keyfile.
+        freekee()
+            .arg("rotate")
+            .arg("keyfile")
+            .arg(&canary)
+            .arg("--new-keyfile")
+            .arg(&kf)
+            .arg("--pass-stdin")
+            .write_stdin(format!("{CANARY_PASSPHRASE}\n"))
+            .output()
+            .expect("setup add");
+        // Now remove it.
+        let out = freekee()
+            .arg("rotate")
+            .arg("keyfile")
+            .arg(&canary)
+            .arg("--keyfile")
+            .arg(&kf)
+            .arg("--remove")
+            .arg("--pass-stdin")
+            .write_stdin(format!("{CANARY_PASSPHRASE}\n"))
+            .output()
+            .expect("run rotate keyfile --remove");
+        assert!(
+            out.status.success(),
+            "rotate keyfile remove must succeed; stderr: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_no_canary_in("rotate keyfile remove", &out.stdout, &out.stderr);
+    }
+}
+
+/// Write 64 deterministic-pseudo-random bytes to act as a keyfile in
+/// secret-leakage tests. Path-derived seed so different tempdirs get
+/// distinct content. (Keyfile bytes themselves aren't a meta-test
+/// canary: the master passphrase canary is what these tests guard.)
+fn write_random_canary_keyfile(path: &std::path::Path) {
+    use std::io::Write;
+    let seed: u64 = path
+        .as_os_str()
+        .to_string_lossy()
+        .bytes()
+        .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
+    let bytes: Vec<u8> = (0..64u8)
+        .map(|i| seed.wrapping_mul(i as u64 + 1).to_le_bytes()[i as usize % 8])
+        .collect();
+    let mut f = std::fs::File::create(path).unwrap();
+    f.write_all(&bytes).unwrap();
 }

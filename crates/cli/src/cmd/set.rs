@@ -1,7 +1,7 @@
 //! `freekee set` - upsert an entry. Field assignments are passed as
 //! `key=value` positional arguments. `--gen-password` synthesizes a
 //! password via `core::PasswordPolicy`; the value is silent unless
-//! `--print-generated` is set, per the M1 plan.
+//! `--print-generated` is set.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -43,13 +43,24 @@ pub fn run(args: Args) -> anyhow::Result<ExitCode> {
     let mut scratch = Vec::new();
     let entry_path: EntryPath<'_> = super::entry_path_from(&segments, &mut scratch);
 
-    let parsed: Vec<(String, String)> = args
+    let mut parsed: Vec<(String, String)> = args
         .assignments
         .iter()
         .map(|a| parse_assignment(a))
         .collect::<anyhow::Result<_>>()?;
 
-    let exists = vault.db().entry_by_path(entry_path).is_some();
+    // `field=-` sentinel: replace each "-" value with one line read
+    // from stdin, in command-line order. Reads happen after
+    // `read_passphrase` so the passphrase consumes line 1 and each
+    // sentinel consumes the next line.
+    for (_, v) in parsed.iter_mut() {
+        if v == "-" {
+            let line = super::read_field_value_from_stdin()?;
+            *v = line.as_str().to_owned();
+        }
+    }
+
+    let exists = vault.entry_exists(entry_path);
     if !exists {
         // Insert the entry with the standard fields collected up
         // front. Any unknown keys go in via `set_field` after the

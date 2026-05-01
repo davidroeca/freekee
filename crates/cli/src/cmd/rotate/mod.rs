@@ -4,6 +4,7 @@
 
 pub mod entry;
 pub mod kdf_params;
+pub mod keyfile;
 pub mod passphrase;
 
 use std::process::ExitCode;
@@ -22,6 +23,8 @@ pub enum RotateCmd {
     KdfParams(kdf_params::Args),
     /// Generate a fresh password for an entry.
     Entry(entry::Args),
+    /// Add, replace, or remove the keyfile composite.
+    Keyfile(keyfile::Args),
 }
 
 pub fn run(args: Args) -> anyhow::Result<ExitCode> {
@@ -29,5 +32,6 @@ pub fn run(args: Args) -> anyhow::Result<ExitCode> {
         RotateCmd::Passphrase(a) => passphrase::run(a),
         RotateCmd::KdfParams(a) => kdf_params::run(a),
         RotateCmd::Entry(a) => entry::run(a),
+        RotateCmd::Keyfile(a) => keyfile::run(a),
     }
 }

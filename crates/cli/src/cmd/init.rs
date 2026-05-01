@@ -31,9 +31,8 @@ pub struct Args {
     /// Outer (file-level) cipher.
     #[arg(long, value_enum)]
     pub cipher: Option<CipherChoice>,
-    /// Optional keyfile to record alongside the passphrase. (Reserved
-    /// for M2; today the file is written passphrase-only and a keyfile
-    /// passed here is ignored - see PLAN.md M2 follow-ups.)
+    /// Optional keyfile to bind alongside the passphrase. The vault
+    /// will require both to reopen.
     #[arg(long)]
     pub keyfile: Option<PathBuf>,
     /// Overwrite the destination if it already exists.
@@ -45,16 +44,6 @@ pub struct Args {
 }
 
 pub fn run(args: Args) -> anyhow::Result<ExitCode> {
-    if args.keyfile.is_some() {
-        // `kdbx::Database::save` is passphrase-only today; a keyfile
-        // accepted here would not actually be applied to the new
-        // file. Reject loudly until `rotate keyfile` lands in M2 and
-        // teaches save about keyfile composition.
-        anyhow::bail!(
-            "--keyfile on `init` is not yet supported (deferred to M2 with keyfile-on-save)"
-        );
-    }
-
     let pass = super::read_passphrase(args.pass_stdin)?;
 
     let mut template = DEFAULT_TEMPLATE;
@@ -77,7 +66,13 @@ pub fn run(args: Args) -> anyhow::Result<ExitCode> {
         };
     }
 
-    let _vault = Vault::create(&args.path, pass, template, args.force)?;
+    let _vault = Vault::create(
+        &args.path,
+        pass,
+        args.keyfile.as_deref(),
+        template,
+        args.force,
+    )?;
     println!("Initialized {}", args.path.display());
     Ok(ExitCode::SUCCESS)
 }

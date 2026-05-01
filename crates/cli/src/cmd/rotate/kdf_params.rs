@@ -37,18 +37,9 @@ pub fn run(args: Args) -> anyhow::Result<ExitCode> {
     // accidentally reset iterations/parallelism. Fall back to the
     // workspace-wide defaults if the file's KDF isn't Argon2id (the
     // audit rules already flag legacy-kdf, so this is best-effort).
-    let current = match vault.db().kdf() {
-        kdbx::Kdf::Argon2id {
-            memory,
-            iterations,
-            parallelism,
-        } => Argon2idParams {
-            memory,
-            iterations,
-            parallelism,
-        },
-        _ => DEFAULT_TEMPLATE.kdf,
-    };
+    let current = vault
+        .current_argon2id_params()
+        .unwrap_or(DEFAULT_TEMPLATE.kdf);
 
     let next = Argon2idParams {
         memory: args

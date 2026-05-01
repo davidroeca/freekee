@@ -14,6 +14,25 @@ use crate::backup::{BackupGuard, BackupOutcome};
 use crate::error::{Error, Result};
 use crate::password::PasswordPolicy;
 
+/// Read-only view of an entry's printable fields, returned by
+/// [`Vault::get`]. The password is intentionally absent — callers must
+/// opt into seeing it via [`Vault::get_password`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EntryView {
+    pub title: Option<String>,
+    pub username: Option<String>,
+    pub url: Option<String>,
+}
+
+/// Summary of an entry's history, returned by [`Vault::history`].
+/// `timestamps[i]` is the modification time recorded for the historical
+/// entry at index `i`; `count` and `timestamps.len()` are equal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistoryView {
+    pub count: usize,
+    pub timestamps: Vec<Option<chrono::NaiveDateTime>>,
+}
+
 /// Options shared by all rotation methods on [`Vault`].
 #[derive(Debug, Clone, Copy)]
 pub struct RotateOpts {
@@ -61,13 +80,14 @@ impl Vault {
         })
     }
 
-    /// Create a new KDBX file at `path` with the given template and
-    /// passphrase. Refuses to overwrite an existing file unless
-    /// `force` is true. The new file is written and fsynced before
-    /// returning the open `Vault`.
+    /// Create a new KDBX file at `path` with the given template,
+    /// passphrase, and optional keyfile. Refuses to overwrite an
+    /// existing file unless `force` is true. The new file is written
+    /// and fsynced before returning the open `Vault`.
     pub fn create(
         path: &Path,
         password: Zeroizing<String>,
+        keyfile: Option<&Path>,
         template: kdbx::NewDatabaseTemplate,
         force: bool,
     ) -> Result<Self> {
@@ -78,12 +98,12 @@ impl Vault {
             return Err(crate::error::Error::FileExists);
         }
         let db = kdbx::Database::new_empty(template);
-        db.save(path, password.as_str())?;
+        db.save(path, password.as_str(), keyfile)?;
         Ok(Self {
             db,
             path: path.to_path_buf(),
             password,
-            keyfile: None,
+            keyfile: keyfile.map(Path::to_path_buf),
         })
     }
 
@@ -91,7 +111,8 @@ impl Vault {
     /// the held credentials. No backup; rotation paths use
     /// `save_with_backup` (Phase 2.4).
     pub fn save(&mut self) -> Result<()> {
-        self.db.save(&self.path, self.password.as_str())?;
+        self.db
+            .save(&self.path, self.password.as_str(), self.keyfile.as_deref())?;
         Ok(())
     }
 
@@ -159,11 +180,86 @@ impl Vault {
         Ok(())
     }
 
-    /// Borrow the underlying `kdbx::Database` for read-only inspection.
-    /// Callers needing more granular access (history, attachments,
-    /// etc.) use this until first-class `core` accessors arrive.
-    pub fn db(&self) -> &kdbx::Database {
-        &self.db
+    /// Sorted list of every entry's full `<group>/<title>` path.
+    /// `needle` is an optional case-insensitive substring filter
+    /// applied against the rendered path.
+    pub fn list(&self, needle: Option<&str>) -> Vec<String> {
+        let lc_needle = needle.map(str::to_lowercase);
+        let mut lines: Vec<String> = self
+            .db
+            .entries()
+            .map(|e| {
+                let title = e.title().unwrap_or("").to_owned();
+                let mut full = e.group_path();
+                full.push(title);
+                full.join("/")
+            })
+            .filter(|full| {
+                lc_needle
+                    .as_ref()
+                    .is_none_or(|n| full.to_lowercase().contains(n))
+            })
+            .collect();
+        lines.sort();
+        lines
+    }
+
+    /// Read-only view of an entry's printable fields. Returns `None`
+    /// when no entry exists at `path`. The password is deliberately
+    /// excluded; callers must opt in via [`Vault::get_password`].
+    pub fn get(&self, path: EntryPath<'_>) -> Option<EntryView> {
+        self.db.entry_by_path(path).map(|e| EntryView {
+            title: e.title().map(str::to_owned),
+            username: e.username().map(str::to_owned),
+            url: e.url().map(str::to_owned),
+        })
+    }
+
+    /// Stored password for the entry at `path`, wrapped in
+    /// [`Zeroizing`] so it's wiped from memory when dropped. Separate
+    /// accessor (rather than a field on [`EntryView`]) so password
+    /// surfacing is always an explicit caller decision.
+    pub fn get_password(&self, path: EntryPath<'_>) -> Option<Zeroizing<String>> {
+        self.db
+            .entry_by_path(path)
+            .and_then(|e| e.password().map(|p| Zeroizing::new(p.to_owned())))
+    }
+
+    /// History summary for the entry at `path`: count of prior versions
+    /// plus the modification timestamp recorded on each. Index 0 is the
+    /// most recent prior version. Returns `None` when no entry exists.
+    pub fn history(&self, path: EntryPath<'_>) -> Option<HistoryView> {
+        let entry = self.db.entry_by_path(path)?;
+        let count = entry.history_count();
+        let timestamps: Vec<Option<chrono::NaiveDateTime>> = (0..count)
+            .map(|i| entry.historical(i).and_then(|h| h.last_modified_at()))
+            .collect();
+        Some(HistoryView { count, timestamps })
+    }
+
+    /// Whether an entry exists at `path`. Cheaper to call than
+    /// [`Vault::get`] when only existence matters.
+    pub fn entry_exists(&self, path: EntryPath<'_>) -> bool {
+        self.db.entry_by_path(path).is_some()
+    }
+
+    /// Current Argon2id parameters for this database, or `None` when
+    /// the file is using a different KDF (legacy AES-KDF, Argon2d).
+    /// Lets callers inherit the file's existing values when only some
+    /// of the Argon2id knobs are being changed.
+    pub fn current_argon2id_params(&self) -> Option<kdbx::Argon2idParams> {
+        match self.db.kdf() {
+            kdbx::Kdf::Argon2id {
+                iterations,
+                memory,
+                parallelism,
+            } => Some(kdbx::Argon2idParams {
+                iterations,
+                memory,
+                parallelism,
+            }),
+            _ => None,
+        }
     }
 
     /// Generate a fresh password for the entry at `path` using
@@ -204,6 +300,32 @@ impl Vault {
         self.save_and_verify_with_backup(opts.backup, &pw)
     }
 
+    /// Add, replace, or remove the keyfile composite for this database.
+    /// Pass `Some(path)` to bind a (new) keyfile, `None` to drop any
+    /// existing one. The passphrase is unchanged; the verify step
+    /// reopens the saved file using the *new* keyfile composition. On
+    /// verify failure, restores from the backup (if any), reverts the
+    /// held keyfile state to match, and surfaces
+    /// [`Error::RotationVerificationFailed`].
+    pub fn rotate_keyfile(
+        &mut self,
+        new_keyfile: Option<&Path>,
+        opts: RotateOpts,
+    ) -> Result<BackupOutcome> {
+        // Snapshot prior state so the held keyfile stays consistent
+        // with whatever's on disk on rollback.
+        let prev = self.keyfile.clone();
+        self.keyfile = new_keyfile.map(Path::to_path_buf);
+        let pw = self.password.clone();
+        match self.save_and_verify_with_backup(opts.backup, &pw) {
+            Ok(outcome) => Ok(outcome),
+            Err(e) => {
+                self.keyfile = prev;
+                Err(e)
+            }
+        }
+    }
+
     /// Re-encrypt the file under a new passphrase. Optionally takes a
     /// timestamped backup first; always verifies the rotated file by
     /// reopening it with the new passphrase before declaring success.
@@ -225,11 +347,9 @@ impl Vault {
         Ok(outcome)
     }
 
-    /// Shared rotation tail: take a backup, save with `password`,
-    /// reopen to confirm the file decrypts, roll back on failure.
-    /// `password` is the credential used both to write the file and
-    /// to verify it (always equal - `kdbx::Database::save` is
-    /// passphrase-only today; keyfile-on-save lands in M2).
+    /// Shared rotation tail: take a backup, save with `password` plus
+    /// the vault's currently-held keyfile, reopen to confirm the file
+    /// decrypts under the same composite, roll back on failure.
     fn save_and_verify_with_backup(
         &mut self,
         backup: bool,
@@ -240,12 +360,14 @@ impl Vault {
         } else {
             BackupGuard::skip()
         };
-        self.db.save(&self.path, password)?;
-        // `keyfile: None` deliberately. `kdbx::Database::save` writes
-        // a passphrase-only file regardless of how the vault was
-        // opened (keyfile-on-save is a pending M2 follow-up); so the
-        // verify must use the same composition the save produced.
-        if kdbx::Database::open(&self.path, password, None).is_err() {
+        let keyfile = self.keyfile.as_deref();
+        self.db.save(&self.path, password, keyfile)?;
+        // Verify must use the same composite the save produced -
+        // i.e., the same keyfile (or absence thereof). Rotations that
+        // change the keyfile must update `self.keyfile` before
+        // entering this helper so the post-save verify sees the new
+        // composition.
+        if kdbx::Database::open(&self.path, password, keyfile).is_err() {
             let _ = guard.restore(&self.path);
             return Err(Error::RotationVerificationFailed);
         }

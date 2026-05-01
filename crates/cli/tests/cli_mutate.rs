@@ -41,6 +41,7 @@ fn seed_vault(path: &Path, password: &str) {
     let mut vault = Vault::create(
         path,
         Zeroizing::new(password.to_owned()),
+        None,
         tiny_template(),
         false,
     )
@@ -80,7 +81,7 @@ fn seed_vault(path: &Path, password: &str) {
         },
     )
     .unwrap();
-    db.save(path, password).unwrap();
+    db.save(path, password, None).unwrap();
 }
 
 #[test]
@@ -582,6 +583,265 @@ fn rotate_entry_print_generated_flag_echoes_new_password() {
         stdout.contains(&new_pw),
         "--print-generated must echo the new password to stdout"
     );
+}
+
+// ---------------------------------------------------------------------------
+// `set field=-` stdin sentinel.
+//
+// The sentinel reads the value from stdin instead of the command line,
+// so secrets don't leak into shell history or `ps` output.
+// Stdin order: passphrase first (existing `--pass-stdin`), then one
+// line per `field=-` assignment in command-line order.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn set_field_sentinel_reads_password_from_stdin() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    seed_vault(&dest, "sent-pw");
+
+    let secret = "stdin-only-secret-7c3";
+    freekee()
+        .arg("set")
+        .arg(&dest)
+        .arg("github")
+        .arg("password=-")
+        .arg("--pass-stdin")
+        .write_stdin(format!("sent-pw\n{secret}\n"))
+        .assert()
+        .success();
+
+    let db = kdbx::Database::open(&dest, "sent-pw", None).unwrap();
+    let entry = db
+        .entry_by_path(EntryPath {
+            groups: &[],
+            title: "github",
+        })
+        .unwrap();
+    assert_eq!(entry.password(), Some(secret));
+}
+
+#[test]
+fn set_field_sentinel_supports_multiple_fields_in_order() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    seed_vault(&dest, "multi-pw");
+
+    freekee()
+        .arg("set")
+        .arg(&dest)
+        .arg("github")
+        .arg("username=-")
+        .arg("password=-")
+        .arg("--pass-stdin")
+        .write_stdin("multi-pw\nstdin-user\nstdin-pass\n")
+        .assert()
+        .success();
+
+    let db = kdbx::Database::open(&dest, "multi-pw", None).unwrap();
+    let entry = db
+        .entry_by_path(EntryPath {
+            groups: &[],
+            title: "github",
+        })
+        .unwrap();
+    assert_eq!(entry.username(), Some("stdin-user"));
+    assert_eq!(entry.password(), Some("stdin-pass"));
+}
+
+#[test]
+fn set_field_sentinel_does_not_consume_extra_lines() {
+    // Single sentinel reads exactly one line. Any extra lines on
+    // stdin must be ignored (not silently consumed and stored). We
+    // verify by piping passphrase + value + a line that would cause
+    // a wrong-credentials error if it were treated as the value.
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    seed_vault(&dest, "extra-pw");
+
+    let intended = "the-real-value";
+    freekee()
+        .arg("set")
+        .arg(&dest)
+        .arg("github")
+        .arg("password=-")
+        .arg("--pass-stdin")
+        .write_stdin(format!(
+            "extra-pw\n{intended}\nthis-extra-line-must-be-ignored\n"
+        ))
+        .assert()
+        .success();
+
+    let db = kdbx::Database::open(&dest, "extra-pw", None).unwrap();
+    let entry = db
+        .entry_by_path(EntryPath {
+            groups: &[],
+            title: "github",
+        })
+        .unwrap();
+    assert_eq!(entry.password(), Some(intended));
+}
+
+// ---------------------------------------------------------------------------
+// init --keyfile + rotate keyfile.
+//
+// Each test writes a fresh random keyfile to the tempdir and shells out to
+// the binary, then asserts the resulting file requires the expected
+// composite to reopen.
+// ---------------------------------------------------------------------------
+
+fn write_random_keyfile(path: &Path) {
+    use std::io::Write;
+    let seed: u64 = path
+        .as_os_str()
+        .to_string_lossy()
+        .bytes()
+        .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
+    let bytes: Vec<u8> = (0..64u8)
+        .map(|i| seed.wrapping_mul(i as u64 + 1).to_le_bytes()[i as usize % 8])
+        .collect();
+    let mut f = std::fs::File::create(path).unwrap();
+    f.write_all(&bytes).unwrap();
+}
+
+#[test]
+fn init_with_keyfile_creates_a_kdbx_that_requires_keyfile() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("kf.kdbx");
+    let kf = tmp.path().join("init.key");
+    write_random_keyfile(&kf);
+
+    freekee()
+        .arg("init")
+        .arg(&dest)
+        .arg("--keyfile")
+        .arg(&kf)
+        .arg("--memory")
+        .arg("8")
+        .arg("--iterations")
+        .arg("1")
+        .arg("--parallelism")
+        .arg("1")
+        .arg("--pass-stdin")
+        .write_stdin("init-kf-pw\n")
+        .assert()
+        .success();
+
+    // Reopen with the full composite: works.
+    kdbx::Database::open(&dest, "init-kf-pw", Some(&kf))
+        .expect("init --keyfile must produce a file that reopens with the same composite");
+    // Reopen without the keyfile: must fail.
+    assert!(
+        kdbx::Database::open(&dest, "init-kf-pw", None).is_err(),
+        "init --keyfile must NOT write a passphrase-only file"
+    );
+}
+
+#[test]
+fn rotate_keyfile_add_via_cli_makes_keyfile_required() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    let new_kf = tmp.path().join("new.key");
+    write_random_keyfile(&new_kf);
+    seed_vault(&dest, "rotkf-pw");
+
+    freekee()
+        .arg("rotate")
+        .arg("keyfile")
+        .arg(&dest)
+        .arg("--new-keyfile")
+        .arg(&new_kf)
+        .arg("--pass-stdin")
+        .write_stdin("rotkf-pw\n")
+        .assert()
+        .success();
+
+    kdbx::Database::open(&dest, "rotkf-pw", Some(&new_kf))
+        .expect("rotated file must require the new keyfile composite");
+    assert!(
+        kdbx::Database::open(&dest, "rotkf-pw", None).is_err(),
+        "passphrase-only must be rejected after rotate keyfile add"
+    );
+}
+
+#[test]
+fn rotate_keyfile_remove_via_cli_makes_keyfile_optional() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    let kf = tmp.path().join("k.key");
+    write_random_keyfile(&kf);
+
+    // Seed: passphrase-only vault, then add keyfile via CLI.
+    seed_vault(&dest, "rm-pw");
+    freekee()
+        .arg("rotate")
+        .arg("keyfile")
+        .arg(&dest)
+        .arg("--new-keyfile")
+        .arg(&kf)
+        .arg("--pass-stdin")
+        .write_stdin("rm-pw\n")
+        .assert()
+        .success();
+
+    // Remove the keyfile.
+    freekee()
+        .arg("rotate")
+        .arg("keyfile")
+        .arg(&dest)
+        .arg("--keyfile")
+        .arg(&kf)
+        .arg("--remove")
+        .arg("--pass-stdin")
+        .write_stdin("rm-pw\n")
+        .assert()
+        .success();
+
+    kdbx::Database::open(&dest, "rm-pw", None)
+        .expect("file must reopen passphrase-only after --remove");
+}
+
+#[test]
+fn rotate_keyfile_with_wrong_current_keyfile_errors_out() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    let real_kf = tmp.path().join("real.key");
+    let wrong_kf = tmp.path().join("wrong.key");
+    let new_kf = tmp.path().join("new.key");
+    write_random_keyfile(&real_kf);
+    write_random_keyfile(&wrong_kf);
+    write_random_keyfile(&new_kf);
+
+    // Set up a vault that requires `real_kf`.
+    seed_vault(&dest, "wrong-pw");
+    freekee()
+        .arg("rotate")
+        .arg("keyfile")
+        .arg(&dest)
+        .arg("--new-keyfile")
+        .arg(&real_kf)
+        .arg("--pass-stdin")
+        .write_stdin("wrong-pw\n")
+        .assert()
+        .success();
+
+    // Attempt to rotate using the wrong current keyfile.
+    freekee()
+        .arg("rotate")
+        .arg("keyfile")
+        .arg(&dest)
+        .arg("--keyfile")
+        .arg(&wrong_kf)
+        .arg("--new-keyfile")
+        .arg(&new_kf)
+        .arg("--pass-stdin")
+        .write_stdin("wrong-pw\n")
+        .assert()
+        .failure();
+
+    // Real composite still works.
+    kdbx::Database::open(&dest, "wrong-pw", Some(&real_kf))
+        .expect("file must remain openable with the real composite");
 }
 
 #[test]

@@ -10,7 +10,7 @@ mod vault;
 pub use backup::BackupOutcome;
 pub use error::{Error, Result};
 pub use password::{Alphabet, PasswordPolicy};
-pub use vault::{RotateOpts, Vault};
+pub use vault::{EntryView, HistoryView, RotateOpts, Vault};
 
 /// Defaults applied to a database created via [`Vault::create`] when
 /// the caller doesn't override them. Chosen to match KeePassXC's

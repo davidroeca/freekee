@@ -26,19 +26,13 @@ pub fn run(args: Args) -> anyhow::Result<ExitCode> {
     let mut scratch = Vec::new();
     let entry_path: EntryPath<'_> = super::entry_path_from(&segments, &mut scratch);
 
-    let entry = vault
-        .db()
-        .entry_by_path(entry_path)
+    let hv = vault
+        .history(entry_path)
         .ok_or_else(|| anyhow::anyhow!("entry not found: {}", args.entry))?;
 
-    let count = entry.history_count();
-    println!("history: {count}");
-    for i in 0..count {
-        let prior = entry
-            .historical(i)
-            .expect("index < history_count must yield a prior version");
-        let modified = prior
-            .last_modified_at()
+    println!("history: {}", hv.count);
+    for (i, ts) in hv.timestamps.iter().enumerate() {
+        let modified = ts
             .map(|t| t.to_string())
             .unwrap_or_else(|| "unknown".to_owned());
         println!("  {i}: modified {modified}");

@@ -96,10 +96,17 @@ impl Database {
         Ok(Self { inner })
     }
 
-    /// Write this database to `path` with a passphrase. KDBX4 only.
-    pub fn save(&self, path: &Path, password: &str) -> Result<()> {
+    /// Write this database to `path`. The credentials used to write
+    /// must match what readers will use to reopen the file: pass
+    /// `keyfile = Some(path)` for keyfile-protected databases, `None`
+    /// for passphrase-only ones. KDBX4 only.
+    pub fn save(&self, path: &Path, password: &str, keyfile: Option<&Path>) -> Result<()> {
         let mut file = File::create(path)?;
-        let key = DatabaseKey::new().with_password(password);
+        let mut key = DatabaseKey::new().with_password(password);
+        if let Some(kf_path) = keyfile {
+            let mut kf = File::open(kf_path)?;
+            key = key.with_keyfile(&mut kf)?;
+        }
         self.inner.save(&mut file, key)?;
         Ok(())
     }

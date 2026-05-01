@@ -81,12 +81,8 @@ pub fn run(args: Args) -> anyhow::Result<ExitCode> {
         // Pull the new password back out of the in-memory db. We
         // never logged it to disk in plaintext outside of the KDBX
         // protected stream.
-        if let Some(p) = vault
-            .db()
-            .entry_by_path(entry_path)
-            .and_then(|e| e.password().map(str::to_owned))
-        {
-            println!("{p}");
+        if let Some(p) = vault.get_password(entry_path) {
+            println!("{}", p.as_str());
         }
     } else {
         println!("Rotated entry {}.", args.entry);

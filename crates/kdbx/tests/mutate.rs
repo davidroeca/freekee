@@ -44,7 +44,7 @@ fn add_entry_persists_after_save_and_reopen() {
 
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("new.kdbx");
-    db.save(&path, "test-passphrase").unwrap();
+    db.save(&path, "test-passphrase", None).unwrap();
 
     let reopened = Database::open(&path, "test-passphrase", None).unwrap();
     let entry = reopened
@@ -87,7 +87,7 @@ fn set_entry_field_password_lands_in_history() {
 
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("set-history.kdbx");
-    db.save(&path, "test-passphrase").unwrap();
+    db.save(&path, "test-passphrase", None).unwrap();
 
     let reopened = Database::open(&path, "test-passphrase", None).unwrap();
     let entry = reopened
@@ -145,7 +145,7 @@ fn remove_entry_adds_uuid_to_deleted_objects() {
     // Survives save/reopen.
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("removed.kdbx");
-    db.save(&path, "test-passphrase").unwrap();
+    db.save(&path, "test-passphrase", None).unwrap();
     let reopened = Database::open(&path, "test-passphrase", None).unwrap();
     assert_eq!(reopened.deleted_object_count(), after);
 }
@@ -187,7 +187,7 @@ fn move_entry_to_existing_group_relocates() {
 
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("moved.kdbx");
-    db.save(&path, "test-passphrase").unwrap();
+    db.save(&path, "test-passphrase", None).unwrap();
     let reopened = Database::open(&path, "test-passphrase", None).unwrap();
 
     assert!(
@@ -232,7 +232,7 @@ fn ensure_group_creates_intermediate_groups() {
 
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("deep.kdbx");
-    db.save(&path, "test-passphrase").unwrap();
+    db.save(&path, "test-passphrase", None).unwrap();
     let reopened = Database::open(&path, "test-passphrase", None).unwrap();
     let entry = reopened
         .entry_by_path(EntryPath {
@@ -255,7 +255,7 @@ fn set_kdf_params_then_save_persists_new_params() {
 
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("kdf.kdbx");
-    db.save(&path, "test-passphrase").unwrap();
+    db.save(&path, "test-passphrase", None).unwrap();
 
     let reopened = Database::open(&path, "test-passphrase", None).unwrap();
     match reopened.kdf() {
@@ -270,4 +270,95 @@ fn set_kdf_params_then_save_persists_new_params() {
         }
         other => panic!("expected Argon2id after rotation, got {other:?}"),
     }
+}
+
+// ---------------------------------------------------------------------------
+// Keyfile-on-save.
+//
+// `save` accepts an optional keyfile and the resulting file requires the same
+// composite to reopen.
+// ---------------------------------------------------------------------------
+
+fn fixture_dir(name: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/roundtrip/fixtures")
+        .join(name)
+}
+
+#[test]
+fn save_with_keyfile_round_trips_with_keyfile_required() {
+    let fdir = fixture_dir("with-keyfile");
+    let pass = std::fs::read_to_string(fdir.join("password.txt"))
+        .unwrap()
+        .trim_end_matches('\n')
+        .to_owned();
+    let keyfile = fdir.join("keyfile.bin");
+
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("copy.kdbx");
+    std::fs::copy(fdir.join("db.kdbx"), &dest).unwrap();
+
+    let mut db = Database::open(&dest, &pass, Some(&keyfile)).unwrap();
+    // Mutate so we can prove the save round-trip went through, not
+    // just that the original bytes were left in place.
+    db.add_entry(
+        EntryPath {
+            groups: &[],
+            title: "Inserted",
+        },
+        EntryDraft {
+            username: Some("alice"),
+            password: None,
+            url: None,
+            notes: None,
+        },
+    )
+    .unwrap();
+
+    db.save(&dest, &pass, Some(&keyfile)).unwrap();
+
+    // Reopen with the full composite: succeeds and the mutation is
+    // visible.
+    let reopened = Database::open(&dest, &pass, Some(&keyfile)).unwrap();
+    assert!(
+        reopened
+            .entry_by_path(EntryPath {
+                groups: &[],
+                title: "Inserted"
+            })
+            .is_some(),
+        "mutation must persist across a keyfile-preserving save"
+    );
+
+    // Reopen with passphrase only: must fail. Today's broken `save`
+    // would write a passphrase-only file and this would (incorrectly)
+    // succeed.
+    assert!(
+        Database::open(&dest, &pass, None).is_err(),
+        "keyfile must remain required after save"
+    );
+}
+
+#[test]
+fn save_without_keyfile_remains_passphrase_only() {
+    let mut db = Database::new_empty(tiny_template());
+    db.add_entry(
+        EntryPath {
+            groups: &[],
+            title: "B",
+        },
+        EntryDraft {
+            username: Some("a"),
+            password: None,
+            url: None,
+            notes: None,
+        },
+    )
+    .unwrap();
+
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    db.save(&dest, "pw", None).unwrap();
+
+    Database::open(&dest, "pw", None).expect("passphrase-only round trip still works");
 }

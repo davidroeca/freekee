@@ -180,7 +180,7 @@ freekee rotate kdf <path> --to argon2id
 freekee rotate kdf-params <path> [--memory MIB] [--iterations N] [--parallelism P]
 freekee rotate cipher <path> --to chacha20
 freekee rotate kdbx-version <path> --to 4
-freekee rotate keyfile <path> [--remove | --replace <new-keyfile>]
+freekee rotate keyfile <path> [--remove | --new-keyfile <new-keyfile>]
 freekee rotate entry <path> <entry>          # regenerate single entry's password
 freekee rotate entries <path> --where 'reused | stale | weak'
                                              # bulk-regenerate matching entries
@@ -194,6 +194,7 @@ Conventions:
 
 - Entry paths use `Group/Subgroup/EntryTitle`.
 - Passphrases come from `$FREEKEE_PASS`, prompt, or stdin (`--pass-stdin`).
+- Field values for `set` accept a `field=-` sentinel that reads the value from one line of stdin (after the passphrase line, in command-line order). Use this for assignments that would otherwise leak a secret into shell history or `ps`.
 - Output is human-readable by default; `--json` emits machine format.
 - No subcommand prints secret material unless explicitly requested (`get --show`).
 - Every `rotate` command keeps a backup of the prior file at `<path>.freekee-bak-<timestamp>` unless `--no-backup` is passed.

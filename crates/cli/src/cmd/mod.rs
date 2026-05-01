@@ -64,6 +64,23 @@ pub fn read_passphrase(pass_stdin: bool) -> anyhow::Result<Zeroizing<String>> {
     Ok(Zeroizing::new(prompted))
 }
 
+/// Read one line from stdin and return it as the value for a
+/// `field=-` sentinel in `freekee set`. No env-var fallback: the whole
+/// point of the sentinel is to keep the value off the shell history /
+/// `ps` output / process env, and an env var would defeat that. Empty
+/// stdin (EOF) yields an empty string; the caller decides whether to
+/// reject empty values.
+pub fn read_field_value_from_stdin() -> anyhow::Result<Zeroizing<String>> {
+    let stdin = std::io::stdin();
+    let mut line = String::new();
+    stdin.lock().read_line(&mut line)?;
+    let trimmed = line
+        .trim_end_matches('\n')
+        .trim_end_matches('\r')
+        .to_owned();
+    Ok(Zeroizing::new(trimmed))
+}
+
 /// Read the *new* passphrase used by `rotate passphrase`. Order:
 /// `--new-pass-stdin` (next line of stdin), then `$FREEKEE_NEW_PASS`,
 /// then prompt. Kept distinct from `read_passphrase` so a single

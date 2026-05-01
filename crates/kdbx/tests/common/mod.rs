@@ -33,7 +33,7 @@ pub fn assert_self_roundtrip(fixture: &str) {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let out_path = tempdir.path().join(format!("{fixture}-roundtrip.kdbx"));
     original
-        .save(&out_path, &password)
+        .save(&out_path, &password, None)
         .unwrap_or_else(|e| panic!("save {fixture}: {e}"));
     let reopened = kdbx::Database::open(&out_path, &password, None)
         .unwrap_or_else(|e| panic!("reopen {fixture}: {e}"));
@@ -54,13 +54,13 @@ pub fn assert_roundtrip_idempotent(fixture: &str) {
 
     let once_path = tempdir.path().join(format!("{fixture}-rt1.kdbx"));
     original
-        .save(&once_path, &password)
+        .save(&once_path, &password, None)
         .unwrap_or_else(|e| panic!("save1 {fixture}: {e}"));
     let once = kdbx::Database::open(&once_path, &password, None)
         .unwrap_or_else(|e| panic!("reopen1 {fixture}: {e}"));
 
     let twice_path = tempdir.path().join(format!("{fixture}-rt2.kdbx"));
-    once.save(&twice_path, &password)
+    once.save(&twice_path, &password, None)
         .unwrap_or_else(|e| panic!("save2 {fixture}: {e}"));
     let twice = kdbx::Database::open(&twice_path, &password, None)
         .unwrap_or_else(|e| panic!("reopen2 {fixture}: {e}"));
@@ -114,7 +114,7 @@ pub fn assert_keepassxc_can_open(fixture: &str) {
     let original = kdbx::Database::open(&src, &password, None)
         .unwrap_or_else(|e| panic!("open {fixture}: {e}"));
     original
-        .save(&out_path, &password)
+        .save(&out_path, &password, None)
         .unwrap_or_else(|e| panic!("save {fixture}: {e}"));
 
     let mut child = Command::new("keepassxc-cli")

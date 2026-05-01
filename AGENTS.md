@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-Instructions for Claude Code when working in this repository. Read this file first, then `docs/design.md`, before doing anything.
+Instructions for coding agents when working in this repository. Read this file first, then `docs/design.md`, before doing anything.
 
 ## Project: freekee
 

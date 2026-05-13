@@ -54,6 +54,40 @@ cargo test --workspace
 
 Requires Rust 1.85+.
 
+## Shell completions
+
+`freekee` can emit completion scripts for bash, zsh, fish, elvish, and
+powershell. Pipe the output wherever your shell expects completions:
+
+```sh
+# bash
+freekee completions bash > ~/.local/share/bash-completion/completions/freekee
+
+# zsh (assumes ~/.zfunc is on $fpath)
+freekee completions zsh > ~/.zfunc/_freekee
+
+# fish
+freekee completions fish > ~/.config/fish/completions/freekee.fish
+```
+
+## Default database
+
+Setting a default database avoids passing `--db <path>` to every
+command. Precedence (highest to lowest):
+
+1. `--db <path>` on the command line.
+2. `$FREEKEE_DB` environment variable.
+3. `default_db` in `~/.config/freekee/config.toml` (or the platform
+   equivalent: `$XDG_CONFIG_HOME/freekee/config.toml` on Linux,
+   `~/Library/Application Support/freekee/config.toml` on macOS,
+   `%APPDATA%\freekee\config.toml` on Windows).
+
+Example `config.toml`:
+
+```toml
+default_db = "/home/me/secrets/personal.kdbx"
+```
+
 ## Acknowledgements
 
 Built on the shoulders of giants (non-exhaustive list):

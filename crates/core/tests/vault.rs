@@ -8,7 +8,9 @@
 use std::fs;
 use std::path::PathBuf;
 
-use freekee_core::{Alphabet, EntryView, HistoryView, PasswordPolicy, RotateOpts, Vault};
+use freekee_core::{
+    Alphabet, EntryView, HistoryView, ListFilter, PasswordPolicy, RotateOpts, Vault,
+};
 use kdbx::{
     Argon2idParams, EntryDraft, EntryField, EntryFieldValue, EntryPath, InnerCipher,
     NewDatabaseTemplate, OuterCipher,
@@ -623,7 +625,7 @@ fn list_returns_sorted_paths_with_optional_substring_filter() {
     let dest = tmp.path().join("v.kdbx");
     let vault = vault_with_entries(&dest, &["GitHub", "AlphaBank", "BetaMail"]);
 
-    let all = vault.list(None);
+    let all = vault.list(&ListFilter::default());
     assert_eq!(
         all,
         vec![
@@ -631,14 +633,17 @@ fn list_returns_sorted_paths_with_optional_substring_filter() {
             "BetaMail".to_owned(),
             "GitHub".to_owned(),
         ],
-        "list(None) must return every entry path, sorted ascending"
+        "default filter must return every entry path, sorted ascending"
     );
 
-    let filtered = vault.list(Some("bank"));
+    let filtered = vault.list(&ListFilter {
+        path: Some("bank"),
+        ..ListFilter::default()
+    });
     assert_eq!(
         filtered,
         vec!["AlphaBank".to_owned()],
-        "substring filter must narrow the result set"
+        "path filter must narrow the result set"
     );
 }
 
@@ -649,9 +654,163 @@ fn list_filter_is_case_insensitive() {
     let vault = vault_with_entries(&dest, &["Bank", "Email"]);
 
     assert_eq!(
-        vault.list(Some("BANK")),
+        vault.list(&ListFilter {
+            path: Some("BANK"),
+            ..ListFilter::default()
+        }),
         vec!["Bank".to_owned()],
-        "uppercase needle must still match a lowercase haystack"
+        "uppercase path needle must still match a lowercase haystack"
+    );
+}
+
+#[test]
+fn list_filter_by_username_substring_case_insensitive() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    Vault::create(
+        &dest,
+        Zeroizing::new("pw".to_owned()),
+        None,
+        tiny_template(),
+        false,
+    )
+    .unwrap();
+    let mut vault = Vault::open(&dest, Zeroizing::new("pw".to_owned()), None).unwrap();
+    for (title, username) in [
+        ("Bank", "alice"),
+        ("GitHub", "alice@example.com"),
+        ("Email", "bob"),
+    ] {
+        vault
+            .upsert_entry(
+                EntryPath { groups: &[], title },
+                EntryDraft {
+                    username: Some(username),
+                    ..EntryDraft::default()
+                },
+            )
+            .unwrap();
+    }
+    vault.save().unwrap();
+
+    assert_eq!(
+        vault.list(&ListFilter {
+            username: Some("ALICE"),
+            ..ListFilter::default()
+        }),
+        vec!["Bank".to_owned(), "GitHub".to_owned()],
+        "username substring must match case-insensitively across entries"
+    );
+    assert_eq!(
+        vault.list(&ListFilter {
+            username: Some("@example"),
+            ..ListFilter::default()
+        }),
+        vec!["GitHub".to_owned()],
+        "narrower username substring must match exactly that entry"
+    );
+}
+
+#[test]
+fn list_filter_by_url_substring_case_insensitive() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    Vault::create(
+        &dest,
+        Zeroizing::new("pw".to_owned()),
+        None,
+        tiny_template(),
+        false,
+    )
+    .unwrap();
+    let mut vault = Vault::open(&dest, Zeroizing::new("pw".to_owned()), None).unwrap();
+    for (title, url) in [
+        ("Bank", "https://bank.example.com"),
+        ("GitHub", "https://GITHUB.example.com"),
+        ("Email", "https://mail.example.com"),
+    ] {
+        vault
+            .upsert_entry(
+                EntryPath { groups: &[], title },
+                EntryDraft {
+                    url: Some(url),
+                    ..EntryDraft::default()
+                },
+            )
+            .unwrap();
+    }
+    vault.save().unwrap();
+
+    assert_eq!(
+        vault.list(&ListFilter {
+            url: Some("github"),
+            ..ListFilter::default()
+        }),
+        vec!["GitHub".to_owned()],
+        "url substring must match case-insensitively"
+    );
+    assert_eq!(
+        vault.list(&ListFilter {
+            url: Some("example.com"),
+            ..ListFilter::default()
+        }),
+        vec!["Bank".to_owned(), "Email".to_owned(), "GitHub".to_owned()],
+        "shared substring must match every entry whose url contains it"
+    );
+}
+
+#[test]
+fn list_combines_path_username_url_with_and() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    Vault::create(
+        &dest,
+        Zeroizing::new("pw".to_owned()),
+        None,
+        tiny_template(),
+        false,
+    )
+    .unwrap();
+    let mut vault = Vault::open(&dest, Zeroizing::new("pw".to_owned()), None).unwrap();
+    for (title, username, url) in [
+        ("AlphaBank", "alice", "https://bank.example.com"),
+        ("BetaBank", "bob", "https://bank.example.com"),
+        ("AlphaMail", "alice", "https://mail.example.com"),
+    ] {
+        vault
+            .upsert_entry(
+                EntryPath { groups: &[], title },
+                EntryDraft {
+                    username: Some(username),
+                    url: Some(url),
+                    ..EntryDraft::default()
+                },
+            )
+            .unwrap();
+    }
+    vault.save().unwrap();
+
+    // path + username + url all narrow simultaneously; only AlphaBank
+    // satisfies the conjunction.
+    assert_eq!(
+        vault.list(&ListFilter {
+            path: Some("bank"),
+            username: Some("alice"),
+            url: Some("example.com"),
+        }),
+        vec!["AlphaBank".to_owned()],
+    );
+
+    // Conflicting filters (path matches Bank but username is bob and
+    // url forces mail) → empty result.
+    assert_eq!(
+        vault.list(&ListFilter {
+            path: Some("alpha"),
+            username: Some("bob"),
+            url: None,
+        }),
+        Vec::<String>::new(),
+        "AND-conjunction must yield empty when no entry satisfies all set fields"
     );
 }
 

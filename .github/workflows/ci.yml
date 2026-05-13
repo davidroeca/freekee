@@ -46,6 +46,8 @@ jobs:
           keepassxc-cli --version
       - run: cargo test --workspace --locked
       - run: cargo test -p kdbx --test roundtrip --features keepassxc-verify --locked
+      - run: cargo test -p kdbx --test mutate --features keepassxc-verify --locked
+      - run: cargo test -p cli --test cli_smoke_chain --features keepassxc-verify --locked
 
   audit:
     runs-on: ubuntu-24.04

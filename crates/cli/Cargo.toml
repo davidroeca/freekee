@@ -17,6 +17,7 @@ freekee-core = { path = "../core" }
 kdbx = { path = "../kdbx" }
 audit = { path = "../audit" }
 clap.workspace = true
+clap_complete.workspace = true
 anyhow.workspace = true
 zeroize.workspace = true
 rpassword.workspace = true
@@ -30,6 +31,13 @@ tempfile.workspace = true
 # `keepass` is used in `tests/secret_leakage.rs` to build a canary
 # database with a sentinel entry password.
 keepass.workspace = true
+
+[features]
+# Gates the final `keepassxc-cli db-info` step in
+# `tests/cli_smoke_chain.rs`. CI on; local off unless `keepassxc-cli`
+# 2.7+ is on PATH. Mirrors `crates/kdbx/Cargo.toml`'s gate of the
+# same name.
+keepassxc-verify = []
 
 [lints]
 workspace = true

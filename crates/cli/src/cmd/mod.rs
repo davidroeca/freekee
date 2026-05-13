@@ -1,4 +1,5 @@
 pub mod audit;
+pub mod completions;
 pub mod get;
 pub mod history;
 pub mod info;

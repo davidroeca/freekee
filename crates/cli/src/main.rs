@@ -6,7 +6,7 @@ mod cmd;
 
 #[derive(clap::Parser)]
 #[command(name = "freekee", version, about = "KDBX4 password manager")]
-struct Cli {
+pub(crate) struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
 }
@@ -35,10 +35,41 @@ enum Cmd {
     Mv(cmd::mv::Args),
     /// Credential and parameter rotations.
     Rotate(cmd::rotate::Args),
+    /// Emit a shell completion script for the given shell to stdout.
+    Completions(cmd::completions::Args),
 }
 
 fn main() -> ExitCode {
     use clap::Parser;
+
+    // Resolve the default database path from the config file before
+    // clap parses, so the `#[arg(env = "FREEKEE_DB")]` fallback on each
+    // subcommand picks it up. Precedence: CLI arg > $FREEKEE_DB > config.
+    // We never overwrite an existing $FREEKEE_DB (the env var wins).
+    if std::env::var_os("FREEKEE_DB").is_none()
+        && let Some(cfg_path) = freekee_core::Config::default_path()
+    {
+        match freekee_core::Config::load(&cfg_path) {
+            Ok(cfg) => {
+                if let Some(db) = cfg.default_db {
+                    // SAFETY: this runs before clap parsing and before
+                    // any thread spawn, so no other code can be
+                    // reading the environment concurrently. `set_var`
+                    // is only unsound under concurrent access; the
+                    // single-threaded prologue here satisfies its
+                    // safety contract.
+                    #[allow(unsafe_code)]
+                    unsafe {
+                        std::env::set_var("FREEKEE_DB", db);
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("freekee: {e}");
+                return ExitCode::from(2);
+            }
+        }
+    }
 
     let cli = Cli::parse();
     let result = match cli.cmd {
@@ -53,6 +84,7 @@ fn main() -> ExitCode {
         Cmd::Rm(args) => cmd::rm::run(args),
         Cmd::Mv(args) => cmd::mv::run(args),
         Cmd::Rotate(args) => cmd::rotate::run(args),
+        Cmd::Completions(args) => cmd::completions::run(args),
     };
     match result {
         Ok(code) => code,

@@ -187,6 +187,92 @@ fn ls_lists_entries_with_group_path_prefix() {
 }
 
 #[test]
+fn ls_username_flag_narrows_to_matching_username() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    seed_vault(&dest, "ls-u-pw");
+    // seed_vault creates github(username=alice) and Personal/email
+    // (username=alice@example.com). `--username @example` must keep
+    // only the latter.
+
+    freekee()
+        .arg("ls")
+        .arg("--db")
+        .arg(&dest)
+        .arg("--username")
+        .arg("@example")
+        .arg("--pass-stdin")
+        .write_stdin("ls-u-pw\n")
+        .assert()
+        .success()
+        .stdout(contains("Personal/email"))
+        .stdout(predicates::str::contains("github").not());
+}
+
+#[test]
+fn ls_url_flag_narrows_to_matching_url() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    seed_vault(&dest, "ls-url-pw");
+    // seed_vault's github entry has url https://github.com; the email
+    // entry has no url.
+
+    freekee()
+        .arg("ls")
+        .arg("--db")
+        .arg(&dest)
+        .arg("--url")
+        .arg("github")
+        .arg("--pass-stdin")
+        .write_stdin("ls-url-pw\n")
+        .assert()
+        .success()
+        .stdout(contains("github"))
+        .stdout(predicates::str::contains("email").not());
+}
+
+#[test]
+fn ls_username_and_path_filters_combine_with_and() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    seed_vault(&dest, "ls-and-pw");
+    // Path filter `email` AND username `@example` must select
+    // Personal/email (matches both). Path filter `github` AND
+    // username `@example` must select nothing (the github entry's
+    // username is plain `alice`, not `alice@example.com`).
+
+    freekee()
+        .arg("ls")
+        .arg("--db")
+        .arg(&dest)
+        .arg("email")
+        .arg("--username")
+        .arg("@example")
+        .arg("--pass-stdin")
+        .write_stdin("ls-and-pw\n")
+        .assert()
+        .success()
+        .stdout(contains("Personal/email"));
+
+    let conflicting = freekee()
+        .arg("ls")
+        .arg("--db")
+        .arg(&dest)
+        .arg("github")
+        .arg("--username")
+        .arg("@example")
+        .arg("--pass-stdin")
+        .write_stdin("ls-and-pw\n")
+        .assert()
+        .success();
+    let stdout = String::from_utf8_lossy(&conflicting.get_output().stdout);
+    assert!(
+        stdout.trim().is_empty(),
+        "AND-combined path+username filters with no shared entry must produce no output, got {stdout:?}",
+    );
+}
+
+#[test]
 fn get_default_does_not_show_password() {
     let tmp = tempfile::tempdir().unwrap();
     let dest = tmp.path().join("v.kdbx");

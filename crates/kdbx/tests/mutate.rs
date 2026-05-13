@@ -373,6 +373,110 @@ fn save_without_keyfile_remains_passphrase_only() {
 // ---------------------------------------------------------------------------
 
 #[cfg(feature = "keepassxc-verify")]
+fn assert_keepassxc_db_info_accepts(path: &std::path::Path, password: &str) {
+    use std::io::Write;
+    let mut child = std::process::Command::new("keepassxc-cli")
+        .arg("db-info")
+        .arg(path)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("keepassxc-cli must be on PATH (feature `keepassxc-verify`)");
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin")
+        .write_all(format!("{password}\n").as_bytes())
+        .expect("write password");
+    let output = child.wait_with_output().expect("wait keepassxc-cli");
+    assert!(
+        output.status.success(),
+        "keepassxc-cli rejected {}: stderr={}",
+        path.display(),
+        String::from_utf8_lossy(&output.stderr),
+    );
+}
+
+#[cfg(feature = "keepassxc-verify")]
+#[test]
+fn keepassxc_can_open_file_with_deleted_object() {
+    // Reproduces the delete-path defect surfaced by the operator smoke
+    // chain: `apply_keepassxc_defaults` runs on `open` / `new_empty`,
+    // but `remove_entry` (which adds a `DeletedObject` after
+    // initialization) leaves its numeric fields un-normalized. The
+    // resulting `<UsageCount></UsageCount>` empty element on the
+    // historical-snapshot side of the deletion is what KeePassXC
+    // rejects with "Invalid number value".
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("with-deleted.kdbx");
+    let mut db = Database::new_empty(tiny_template());
+    db.add_entry(
+        EntryPath {
+            groups: &[],
+            title: "ToDelete",
+        },
+        EntryDraft {
+            username: Some("alice"),
+            password: Some("secret"),
+            ..EntryDraft::default()
+        },
+    )
+    .unwrap();
+    db.remove_entry(EntryPath {
+        groups: &[],
+        title: "ToDelete",
+    })
+    .unwrap();
+    assert!(
+        db.deleted_object_count() >= 1,
+        "remove_entry should populate deleted_objects"
+    );
+    db.save(&dest, "del-test-pw", None).unwrap();
+
+    // Round-trip via our own code still works.
+    Database::open(&dest, "del-test-pw", None).expect("our parser must reopen the file");
+
+    // KeePassXC must accept it.
+    assert_keepassxc_db_info_accepts(&dest, "del-test-pw");
+}
+
+#[cfg(feature = "keepassxc-verify")]
+#[test]
+fn keepassxc_can_open_file_after_set_entry_field() {
+    // Hypothesis: `set_entry_field` -> `edit_tracking` snapshots the
+    // prior entry into history. If the history clone introduces any
+    // `Option<numeric>` set to `None`, KeePassXC will reject it.
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("hist.kdbx");
+    let mut db = Database::new_empty(tiny_template());
+    db.add_entry(
+        EntryPath {
+            groups: &[],
+            title: "github",
+        },
+        EntryDraft {
+            username: Some("alice"),
+            password: Some("first"),
+            ..EntryDraft::default()
+        },
+    )
+    .unwrap();
+    db.set_entry_field(
+        EntryPath {
+            groups: &[],
+            title: "github",
+        },
+        EntryField::Password,
+        EntryFieldValue::Protected("second"),
+    )
+    .unwrap();
+    db.save(&dest, "hist-pw", None).unwrap();
+
+    assert_keepassxc_db_info_accepts(&dest, "hist-pw");
+}
+
+#[cfg(feature = "keepassxc-verify")]
 #[test]
 fn keepassxc_can_open_file_created_by_new_empty() {
     let tmp = tempfile::tempdir().unwrap();

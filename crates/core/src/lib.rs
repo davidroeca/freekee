@@ -3,14 +3,16 @@
 //! `kdbx` and `audit` directly (per `docs/design.md` section 5).
 
 pub mod backup;
+mod config;
 mod error;
 pub mod password;
 mod vault;
 
 pub use backup::BackupOutcome;
+pub use config::Config;
 pub use error::{Error, Result};
 pub use password::{Alphabet, PasswordPolicy};
-pub use vault::{EntryView, HistoryView, RotateOpts, Vault};
+pub use vault::{EntryView, HistoryView, ListFilter, RotateOpts, Vault};
 
 /// Defaults applied to a database created via [`Vault::create`] when
 /// the caller doesn't override them. Chosen to match KeePassXC's

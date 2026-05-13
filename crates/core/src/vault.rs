@@ -48,6 +48,19 @@ impl Default for RotateOpts {
     }
 }
 
+/// Filter passed to [`Vault::list`]. Each field is an optional
+/// case-insensitive substring; multiple fields are AND-combined. An
+/// empty filter (the default) matches every entry.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ListFilter<'a> {
+    /// Match against the rendered `<group>/<title>` path.
+    pub path: Option<&'a str>,
+    /// Match against the entry's username field.
+    pub username: Option<&'a str>,
+    /// Match against the entry's url field.
+    pub url: Option<&'a str>,
+}
+
 pub struct Vault {
     db: kdbx::Database,
     path: PathBuf,
@@ -180,14 +193,25 @@ impl Vault {
         Ok(())
     }
 
-    /// Sorted list of every entry's full `<group>/<title>` path.
-    /// `needle` is an optional case-insensitive substring filter
-    /// applied against the rendered path.
-    pub fn list(&self, needle: Option<&str>) -> Vec<String> {
-        let lc_needle = needle.map(str::to_lowercase);
+    /// Sorted list of every entry's full `<group>/<title>` path,
+    /// optionally narrowed by [`ListFilter`]. All filter fields are
+    /// case-insensitive substring matches; multiple fields are
+    /// AND-combined.
+    pub fn list(&self, filter: &ListFilter<'_>) -> Vec<String> {
+        let lc_path = filter.path.map(str::to_lowercase);
+        let lc_username = filter.username.map(str::to_lowercase);
+        let lc_url = filter.url.map(str::to_lowercase);
         let mut lines: Vec<String> = self
             .db
             .entries()
+            .filter(|e| {
+                lc_username
+                    .as_ref()
+                    .is_none_or(|n| e.username().is_some_and(|u| u.to_lowercase().contains(n)))
+                    && lc_url
+                        .as_ref()
+                        .is_none_or(|n| e.url().is_some_and(|u| u.to_lowercase().contains(n)))
+            })
             .map(|e| {
                 let title = e.title().unwrap_or("").to_owned();
                 let mut full = e.group_path();
@@ -195,7 +219,7 @@ impl Vault {
                 full.join("/")
             })
             .filter(|full| {
-                lc_needle
+                lc_path
                     .as_ref()
                     .is_none_or(|n| full.to_lowercase().contains(n))
             })

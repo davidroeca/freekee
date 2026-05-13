@@ -287,6 +287,15 @@ impl Database {
         let group_id = self.resolve_group_id(path.groups)?;
         let mut group = self.inner.group_mut(group_id).ok_or(Error::NotFound)?;
         let mut entry = group.add_entry();
+        // KeePassXC compat: `cs_opt_fromstr` serializes `Option<usize>`
+        // with `None` as `<IconID></IconID>`, which KeePassXC rejects
+        // with "Invalid number value". Upstream `Entry::new` leaves
+        // `icon = None`; we set the default here so the entry (and any
+        // history snapshot of it, since `track_changes` clones state)
+        // serializes cleanly. The same defaulting happens in
+        // `apply_keepassxc_defaults` for entries already present at
+        // parse / `new_empty` time.
+        entry.set_icon_builtin(0);
         entry.set_unprotected(fields::TITLE, path.title);
         if let Some(u) = draft.username {
             entry.set_unprotected(fields::USERNAME, u);

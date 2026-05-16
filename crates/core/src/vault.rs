@@ -323,6 +323,23 @@ impl Vault {
         self.save_and_verify_with_backup(opts.backup, &pw)
     }
 
+    /// Bring the database's in-memory format version up to whatever
+    /// `keepass-rs` currently writes (today: KDBX4 minor 0; tracks the
+    /// upstream constant when the pin moves). No-op when already at
+    /// the current write target. The legacy KDF and inner cipher are
+    /// preserved as-is — chain `rotate_kdf` / `rotate_cipher`
+    /// afterward if full modernization is desired.
+    pub fn rotate_format(&mut self, opts: RotateOpts) -> Result<BackupOutcome> {
+        if !self.db.ensure_writable() {
+            return Ok(BackupOutcome {
+                changed: false,
+                backup_path: None,
+            });
+        }
+        let pw = self.password.clone();
+        self.save_and_verify_with_backup(opts.backup, &pw)
+    }
+
     /// Rotate the KDF type to Argon2id. If the database already uses
     /// Argon2id, this is a no-op (returns `BackupOutcome { backup_path:
     /// None }`). For legacy AES-KDF databases, the KDF is replaced with

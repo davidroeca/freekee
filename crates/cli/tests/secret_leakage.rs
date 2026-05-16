@@ -250,6 +250,26 @@ fn no_canary_substrings_in_any_command_output() {
         assert_no_canary_in(&format!("{argv:?}"), &out.stdout, &out.stderr);
     }
 
+    // `rotate format`: no-op against a current-format canary still
+    // accepts the master passphrase via stdin and runs the save/verify
+    // tail. The canary must not appear in any captured stream.
+    {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let canary = dir.path().join("canary.kdbx");
+        build_canary(&canary);
+        let out = freekee()
+            .arg("rotate")
+            .arg("format")
+            .arg("--db")
+            .arg(&canary)
+            .arg("--pass-stdin")
+            .write_stdin(format!("{CANARY_PASSPHRASE}\n"))
+            .output()
+            .expect("run rotate format");
+        assert!(out.status.success(), "rotate format no-op must succeed");
+        assert_no_canary_in("rotate format", &out.stdout, &out.stderr);
+    }
+
     // `rotate passphrase`: BOTH the old master canary and the new
     // canary value must stay out of every captured stream. Old and
     // new are distinct sentinels so a leak in either direction is

@@ -1178,3 +1178,76 @@ fn rotate_kdf_legacy_aeskdf_with_backup_reports_changed_and_backup_path() {
     assert!(outcome.changed, "AES-KDF -> Argon2id is a real rotation");
     assert!(outcome.backup_path.is_some(), "backup enabled and written");
 }
+
+#[test]
+fn rotate_format_legacy_kdbx3_upgrades_and_reports_changed() {
+    let fixture = "kdbx3-legacy";
+    let (_tmp, dest) = copied_fixture(fixture);
+    let password = fixture_password(fixture);
+
+    let mut vault = Vault::open(&dest, Zeroizing::new(password.clone()), None).unwrap();
+    let outcome = vault.rotate_format(RotateOpts { backup: false }).unwrap();
+
+    assert!(outcome.changed, "KDBX3 -> current is a real rotation");
+    assert!(outcome.backup_path.is_none(), "backup disabled");
+
+    // File on disk must now open with the same passphrase (sanity check
+    // for save+verify) and report a version `keepass-rs` will write.
+    let reopened = kdbx::Database::open(&dest, &password, None).unwrap();
+    assert_eq!(reopened.kdbx_version().major(), 4);
+}
+
+#[test]
+fn rotate_format_with_backup_reports_changed_and_backup_path() {
+    let fixture = "kdbx3-legacy";
+    let (_tmp, dest) = copied_fixture(fixture);
+    let password = fixture_password(fixture);
+
+    let mut vault = Vault::open(&dest, Zeroizing::new(password), None).unwrap();
+    let outcome = vault.rotate_format(RotateOpts { backup: true }).unwrap();
+
+    assert!(outcome.changed);
+    assert!(outcome.backup_path.is_some(), "backup enabled and written");
+}
+
+#[test]
+fn rotate_format_noop_when_already_current_target() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    Vault::create(
+        &dest,
+        Zeroizing::new("pw".to_owned()),
+        None,
+        tiny_template(),
+        false,
+    )
+    .unwrap();
+
+    let mut vault = Vault::open(&dest, Zeroizing::new("pw".to_owned()), None).unwrap();
+    let outcome = vault.rotate_format(RotateOpts { backup: true }).unwrap();
+
+    assert!(!outcome.changed, "no-op: already at current write target");
+    assert!(outcome.backup_path.is_none(), "no-op: no backup written");
+}
+
+#[test]
+fn rotate_format_preserves_entries_across_kdbx3_to_kdbx4() {
+    let fixture = "kdbx3-legacy";
+    let (_tmp, dest) = copied_fixture(fixture);
+    let password = fixture_password(fixture);
+
+    let before = {
+        let v = Vault::open(&dest, Zeroizing::new(password.clone()), None).unwrap();
+        v.list(&ListFilter::default())
+    };
+    assert!(!before.is_empty(), "fixture must have at least one entry");
+
+    let mut vault = Vault::open(&dest, Zeroizing::new(password.clone()), None).unwrap();
+    vault.rotate_format(RotateOpts { backup: false }).unwrap();
+    drop(vault);
+
+    let after = Vault::open(&dest, Zeroizing::new(password), None)
+        .unwrap()
+        .list(&ListFilter::default());
+    assert_eq!(before, after, "entries must round-trip");
+}

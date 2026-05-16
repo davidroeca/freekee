@@ -716,6 +716,88 @@ fn rotate_kdf_aeskdf_fixture_upgrades_and_reports_rotated() {
 }
 
 #[test]
+fn rotate_format_noop_prints_already_current() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    seed_vault(&dest, "pw");
+
+    freekee()
+        .arg("rotate")
+        .arg("format")
+        .arg("--db")
+        .arg(&dest)
+        .arg("--pass-stdin")
+        .write_stdin("pw\n")
+        .assert()
+        .success()
+        .stdout(contains("Already at current format"));
+}
+
+#[test]
+fn rotate_format_kdbx3_fixture_upgrades_and_reports_rotated() {
+    use std::fs;
+    let fixture_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/roundtrip/fixtures/kdbx3-legacy");
+    let password = fs::read_to_string(fixture_dir.join("password.txt"))
+        .unwrap()
+        .trim_end_matches('\n')
+        .to_owned();
+
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("copy.kdbx");
+    fs::copy(fixture_dir.join("db.kdbx"), &dest).unwrap();
+
+    freekee()
+        .arg("rotate")
+        .arg("format")
+        .arg("--db")
+        .arg(&dest)
+        .arg("--no-backup")
+        .arg("--pass-stdin")
+        .write_stdin(format!("{password}\n"))
+        .assert()
+        .success()
+        .stdout(contains("Rotated format"));
+
+    let db = kdbx::Database::open(&dest, &password, None).unwrap();
+    assert_eq!(db.kdbx_version().major(), 4);
+}
+
+#[test]
+fn rotate_format_no_backup_omits_backup_file() {
+    use std::fs;
+    let fixture_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/roundtrip/fixtures/kdbx3-legacy");
+    let password = fs::read_to_string(fixture_dir.join("password.txt"))
+        .unwrap()
+        .trim_end_matches('\n')
+        .to_owned();
+
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("copy.kdbx");
+    fs::copy(fixture_dir.join("db.kdbx"), &dest).unwrap();
+
+    freekee()
+        .arg("rotate")
+        .arg("format")
+        .arg("--db")
+        .arg(&dest)
+        .arg("--no-backup")
+        .arg("--pass-stdin")
+        .write_stdin(format!("{password}\n"))
+        .assert()
+        .success();
+
+    // The only file in the tempdir should be the rotated db itself.
+    let extras: Vec<_> = fs::read_dir(tmp.path())
+        .unwrap()
+        .map(|e| e.unwrap().file_name())
+        .filter(|n| n != "copy.kdbx")
+        .collect();
+    assert!(extras.is_empty(), "no backup file expected, got {extras:?}");
+}
+
+#[test]
 fn rotate_entry_replaces_password_silently_unless_print_flag() {
     let tmp = tempfile::tempdir().unwrap();
     let dest = tmp.path().join("v.kdbx");

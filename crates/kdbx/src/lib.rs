@@ -167,6 +167,26 @@ impl Database {
         self.inner.root().groups().count()
     }
 
+    /// Bring the in-memory format version up to `keepass-rs`'s current
+    /// write target. Returns `true` if anything changed.
+    ///
+    /// `keepass-rs` 0.12.1 only serializes KDBX 4; calling `save` on a
+    /// parsed KDBX 1/2/3 database returns `UnsupportedVersion`. This
+    /// hook flips `config.version` so the existing write path runs.
+    ///
+    /// The target is read from `DatabaseConfig::default().version`,
+    /// which upstream defines as `KDB4(KDBX4_CURRENT_MINOR_VERSION)`.
+    /// That constant is not in the public API, so we route through
+    /// `default()` to track upstream automatically when the pin moves.
+    pub fn ensure_writable(&mut self) -> bool {
+        let target = keepass::config::DatabaseConfig::default().version;
+        if self.inner.config.version == target {
+            return false;
+        }
+        self.inner.config.version = target;
+        true
+    }
+
     /// File format version recorded in the database header.
     pub fn kdbx_version(&self) -> KdbxVersion {
         use keepass::config::DatabaseVersion as V;

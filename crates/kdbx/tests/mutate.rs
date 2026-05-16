@@ -339,6 +339,80 @@ fn save_with_keyfile_round_trips_with_keyfile_required() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// Format rotation: bringing a parsed database to `keepass-rs`'s current
+// write target (today KDBX4(0)) so it can be saved at all. Without
+// this, `save` on a parsed KDBX 3 database errors with
+// `UnsupportedVersion`.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn ensure_writable_mutates_kdbx3_to_current_kdbx4() {
+    let fdir = fixture_dir("kdbx3-legacy");
+    let pass = std::fs::read_to_string(fdir.join("password.txt"))
+        .unwrap()
+        .trim_end_matches('\n')
+        .to_owned();
+    let mut db = Database::open(&fdir.join("db.kdbx"), &pass, None).unwrap();
+    assert_eq!(db.kdbx_version().major(), 3, "fixture precondition");
+
+    let changed = db.ensure_writable();
+
+    assert!(changed, "KDB3 input must mutate");
+    assert_eq!(
+        db.kdbx_version().major(),
+        4,
+        "in-memory version must now be KDBX4"
+    );
+}
+
+#[test]
+fn ensure_writable_no_op_on_current_kdbx4() {
+    let mut db = Database::new_empty(tiny_template());
+    let v_before = db.kdbx_version();
+
+    let changed = db.ensure_writable();
+
+    assert!(!changed, "freshly-created KDBX4 must be no-op");
+    assert_eq!(
+        db.kdbx_version(),
+        v_before,
+        "version must be unchanged on no-op"
+    );
+}
+
+#[test]
+fn ensure_writable_kdbx3_then_save_round_trips_as_kdbx4() {
+    let fdir = fixture_dir("kdbx3-legacy");
+    let pass = std::fs::read_to_string(fdir.join("password.txt"))
+        .unwrap()
+        .trim_end_matches('\n')
+        .to_owned();
+    let mut db = Database::open(&fdir.join("db.kdbx"), &pass, None).unwrap();
+    let entries_before: Vec<String> = db
+        .entries()
+        .filter_map(|e| e.title().map(str::to_owned))
+        .collect();
+    assert!(
+        !entries_before.is_empty(),
+        "fixture must have at least one entry"
+    );
+
+    db.ensure_writable();
+
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("rotated.kdbx");
+    db.save(&dest, &pass, None).unwrap();
+
+    let reopened = Database::open(&dest, &pass, None).unwrap();
+    assert_eq!(reopened.kdbx_version().major(), 4, "file on disk is KDBX4");
+    let entries_after: Vec<String> = reopened
+        .entries()
+        .filter_map(|e| e.title().map(str::to_owned))
+        .collect();
+    assert_eq!(entries_before, entries_after, "entries must round-trip");
+}
+
 #[test]
 fn save_without_keyfile_remains_passphrase_only() {
     let mut db = Database::new_empty(tiny_template());
@@ -525,4 +599,26 @@ fn keepassxc_can_open_file_created_by_new_empty() {
         "keepassxc-cli rejected init-created file: stderr={}",
         String::from_utf8_lossy(&output.stderr),
     );
+}
+
+#[cfg(feature = "keepassxc-verify")]
+#[test]
+fn keepassxc_can_open_kdbx3_after_format_rotation() {
+    // Round-trip the legacy KDBX 3 fixture through `ensure_writable`
+    // + `save`, then assert `keepassxc-cli db-info` accepts the
+    // rotated file. Locks in the KDB3 -> current upgrade path as a
+    // KeePassXC-compat operation.
+    let fdir = fixture_dir("kdbx3-legacy");
+    let pass = std::fs::read_to_string(fdir.join("password.txt"))
+        .unwrap()
+        .trim_end_matches('\n')
+        .to_owned();
+
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("rotated.kdbx");
+    let mut db = Database::open(&fdir.join("db.kdbx"), &pass, None).unwrap();
+    assert!(db.ensure_writable(), "fixture is KDB3, mutation expected");
+    db.save(&dest, &pass, None).unwrap();
+
+    assert_keepassxc_db_info_accepts(&dest, &pass);
 }

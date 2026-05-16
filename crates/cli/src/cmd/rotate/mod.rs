@@ -4,6 +4,7 @@
 
 pub mod cipher;
 pub mod entry;
+pub mod format;
 pub mod kdf;
 pub mod kdf_params;
 pub mod keyfile;
@@ -31,6 +32,8 @@ pub enum RotateCmd {
     Keyfile(keyfile::Args),
     /// Change the outer and/or inner cipher.
     Cipher(cipher::Args),
+    /// Upgrade the file format to `keepass-rs`'s current write target.
+    Format(format::Args),
 }
 
 pub fn run(args: Args) -> anyhow::Result<ExitCode> {
@@ -41,5 +44,6 @@ pub fn run(args: Args) -> anyhow::Result<ExitCode> {
         RotateCmd::Entry(a) => entry::run(a),
         RotateCmd::Keyfile(a) => keyfile::run(a),
         RotateCmd::Cipher(a) => cipher::run(a),
+        RotateCmd::Format(a) => format::run(a),
     }
 }

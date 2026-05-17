@@ -538,6 +538,83 @@ fn no_canary_substrings_in_any_command_output() {
         );
         assert_no_canary_in("rotate keyfile remove", &out.stdout, &out.stderr);
     }
+
+    // `rotate entries --weak`: bulk rotate. No `--print-generated` flag
+    // is supported for this command, so neither the master passphrase,
+    // any prior entry plaintext, nor any new generated password may
+    // appear in stdout or stderr. Two weak entries make the dedup +
+    // multi-rotate path observable.
+    {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let canary = dir.path().join("canary.kdbx");
+        // Custom build: two entries, each with a distinct sentinel
+        // weak password so the bulk command rotates both.
+        const WEAK_A: &str = "WEAK_BULK_CANARY_A_4f9d";
+        const WEAK_B: &str = "WEAK_BULK_CANARY_B_2a7c";
+        {
+            let mut inner = keepass::Database::new();
+            {
+                let mut root = inner.root_mut();
+                let mut e1 = root.add_entry();
+                e1.set_unprotected(keepass::db::fields::TITLE, "Weak-A");
+                e1.set_protected(keepass::db::fields::PASSWORD, WEAK_A);
+            }
+            {
+                let mut root = inner.root_mut();
+                let mut e2 = root.add_entry();
+                e2.set_unprotected(keepass::db::fields::TITLE, "Weak-B");
+                e2.set_protected(keepass::db::fields::PASSWORD, WEAK_B);
+            }
+            let mut file = std::fs::File::create(&canary).expect("create");
+            let key = keepass::DatabaseKey::new().with_password(CANARY_PASSPHRASE);
+            inner.save(&mut file, key).expect("save canary");
+        }
+
+        let out = freekee()
+            .arg("rotate")
+            .arg("entries")
+            .arg("--db")
+            .arg(&canary)
+            .arg("--weak")
+            .arg("--pass-stdin")
+            .write_stdin(format!("{CANARY_PASSPHRASE}\n"))
+            .output()
+            .expect("run rotate entries --weak");
+        assert!(
+            out.status.success(),
+            "rotate entries --weak must succeed; stderr: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_no_canary_in("rotate entries --weak", &out.stdout, &out.stderr);
+
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        for prior in [WEAK_A, WEAK_B] {
+            assert!(
+                !stdout.contains(prior) && !stderr.contains(prior),
+                "prior weak plaintext `{prior}` must not leak: stdout={stdout} stderr={stderr}",
+            );
+        }
+
+        // Read both new passwords back and assert they're absent too.
+        let db = kdbx::Database::open(&canary, CANARY_PASSPHRASE, None).unwrap();
+        for title in ["Weak-A", "Weak-B"] {
+            let new_pw = db
+                .entry_by_path(kdbx::EntryPath { groups: &[], title })
+                .unwrap()
+                .password()
+                .unwrap()
+                .to_owned();
+            assert!(
+                !stdout.contains(&new_pw),
+                "new password for `{title}` must not echo to stdout: {stdout}"
+            );
+            assert!(
+                !stderr.contains(&new_pw),
+                "new password for `{title}` must not echo to stderr: {stderr}"
+            );
+        }
+    }
 }
 
 /// Write 64 deterministic-pseudo-random bytes to act as a keyfile in

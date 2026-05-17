@@ -9,7 +9,8 @@ use std::fs;
 use std::path::PathBuf;
 
 use freekee_core::{
-    Alphabet, EntryView, HistoryView, ListFilter, PasswordPolicy, RotateOpts, Vault,
+    Alphabet, BulkRotateFilter, EntryView, HistoryView, ListFilter, PasswordPolicy, RotateOpts,
+    Vault,
 };
 use kdbx::{
     Argon2idParams, EntryDraft, EntryField, EntryFieldValue, EntryPath, InnerCipher,
@@ -1250,4 +1251,264 @@ fn rotate_format_preserves_entries_across_kdbx3_to_kdbx4() {
         .unwrap()
         .list(&ListFilter::default());
     assert_eq!(before, after, "entries must round-trip");
+}
+
+// --- rotate_entries (bulk regeneration by audit predicate) ---
+
+/// Seed a vault with arbitrary (title, password) pairs at the root, all
+/// usernames the same, then save. Returns an open Vault on `dest`.
+fn vault_with_password_entries(dest: &std::path::Path, entries: &[(&str, &str)]) -> Vault {
+    Vault::create(
+        dest,
+        Zeroizing::new("pw".to_owned()),
+        None,
+        tiny_template(),
+        false,
+    )
+    .unwrap();
+    let mut vault = Vault::open(dest, Zeroizing::new("pw".to_owned()), None).unwrap();
+    for (title, password) in entries {
+        vault
+            .upsert_entry(
+                EntryPath { groups: &[], title },
+                EntryDraft {
+                    username: Some("alice"),
+                    password: Some(password),
+                    ..EntryDraft::default()
+                },
+            )
+            .unwrap();
+    }
+    vault.save().unwrap();
+    vault
+}
+
+#[test]
+fn rotate_entries_weak_only_rotates_only_weak_entries() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    let strong = "qWk3@p9Lnv8Z2!Mrx7&fE$Bc1-strong";
+    let mut vault = vault_with_password_entries(&dest, &[("Weak", "123456"), ("Strong", strong)]);
+
+    let policy = PasswordPolicy {
+        length: 32,
+        alphabet: Alphabet::AlphaNum,
+    };
+    let (outcome, rotated) = vault
+        .rotate_entries(
+            &BulkRotateFilter {
+                weak: true,
+                stale: false,
+                reused: false,
+            },
+            &policy,
+            RotateOpts { backup: true },
+        )
+        .expect("rotate_entries");
+
+    assert!(outcome.changed);
+    assert!(outcome.backup_path.is_some(), "backup must be created");
+    assert_eq!(rotated, vec!["Weak".to_owned()]);
+
+    drop(vault);
+    let reopened = kdbx::Database::open(&dest, "pw", None).unwrap();
+    let weak = reopened
+        .entry_by_path(EntryPath {
+            groups: &[],
+            title: "Weak",
+        })
+        .unwrap();
+    let new_pw = weak.password().expect("weak entry must have a password");
+    assert_eq!(new_pw.len(), 32);
+    assert_ne!(new_pw, "123456");
+    let strong_e = reopened
+        .entry_by_path(EntryPath {
+            groups: &[],
+            title: "Strong",
+        })
+        .unwrap();
+    assert_eq!(
+        strong_e.password(),
+        Some(strong),
+        "non-matching entry must be left untouched"
+    );
+}
+
+#[test]
+fn rotate_entries_combined_filters_dedup_same_entry_matched_by_two_predicates() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    // Two entries sharing the same WEAK password: each matches both the
+    // weak predicate AND the reused predicate. Union must dedup so each
+    // entry rotates exactly once (one history snapshot, not two).
+    let shared_weak = "weak123";
+    let mut vault = vault_with_password_entries(
+        &dest,
+        &[
+            ("Mail", shared_weak),
+            ("Calendar", shared_weak),
+            ("Strong", "qWk3@p9Lnv8Z2!Mrx7&fE$Bc1-unique"),
+        ],
+    );
+
+    let policy = PasswordPolicy {
+        length: 24,
+        alphabet: Alphabet::AlphaNumSymbol,
+    };
+    let (_, mut rotated) = vault
+        .rotate_entries(
+            &BulkRotateFilter {
+                weak: true,
+                stale: false,
+                reused: true,
+            },
+            &policy,
+            RotateOpts { backup: false },
+        )
+        .expect("rotate_entries");
+    rotated.sort();
+    assert_eq!(rotated, vec!["Calendar".to_owned(), "Mail".to_owned()]);
+
+    drop(vault);
+    let reopened = kdbx::Database::open(&dest, "pw", None).unwrap();
+    for title in ["Mail", "Calendar"] {
+        let e = reopened
+            .entry_by_path(EntryPath { groups: &[], title })
+            .unwrap();
+        assert_eq!(
+            e.history_count(),
+            1,
+            "entry `{title}` must have exactly one history snapshot, not two",
+        );
+    }
+}
+
+#[test]
+fn rotate_entries_no_match_short_circuits_without_save() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    let strong = "qWk3@p9Lnv8Z2!Mrx7&fE$Bc1-only";
+    let mut vault = vault_with_password_entries(&dest, &[("Strong", strong)]);
+    let mtime_before = fs::metadata(&dest).unwrap().modified().unwrap();
+
+    let (outcome, rotated) = vault
+        .rotate_entries(
+            &BulkRotateFilter {
+                weak: true,
+                stale: false,
+                reused: false,
+            },
+            &PasswordPolicy::default(),
+            RotateOpts { backup: true },
+        )
+        .expect("no-match path must succeed");
+
+    assert!(!outcome.changed, "no matches: nothing saved");
+    assert!(outcome.backup_path.is_none(), "no save: no backup");
+    assert!(rotated.is_empty());
+
+    let mtime_after = fs::metadata(&dest).unwrap().modified().unwrap();
+    assert_eq!(mtime_before, mtime_after, "file must not be rewritten");
+    let parent = dest.parent().unwrap();
+    let bak_count = fs::read_dir(parent)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_name().to_string_lossy().contains(".freekee-bak-"))
+        .count();
+    assert_eq!(bak_count, 0, "no backup file must be created on no-match");
+}
+
+#[test]
+fn rotate_entries_no_backup_still_rotates_and_writes_history() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    let mut vault = vault_with_password_entries(&dest, &[("Weak", "abc")]);
+
+    let (outcome, rotated) = vault
+        .rotate_entries(
+            &BulkRotateFilter {
+                weak: true,
+                stale: false,
+                reused: false,
+            },
+            &PasswordPolicy::default(),
+            RotateOpts { backup: false },
+        )
+        .unwrap();
+    assert!(outcome.changed);
+    assert!(
+        outcome.backup_path.is_none(),
+        "--no-backup must not produce a backup path"
+    );
+    assert_eq!(rotated, vec!["Weak".to_owned()]);
+
+    drop(vault);
+    let reopened = kdbx::Database::open(&dest, "pw", None).unwrap();
+    let e = reopened
+        .entry_by_path(EntryPath {
+            groups: &[],
+            title: "Weak",
+        })
+        .unwrap();
+    assert_eq!(e.history_count(), 1);
+}
+
+#[test]
+fn rotate_entries_history_delta_is_plus_one_per_match() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    let mut vault = vault_with_password_entries(&dest, &[("Weak", "abc")]);
+    let entry_path = EntryPath {
+        groups: &[],
+        title: "Weak",
+    };
+
+    // Pre-rotate once via single-entry rotate to seed baseline history = 1.
+    vault
+        .rotate_entry(
+            entry_path,
+            &PasswordPolicy {
+                length: 24,
+                alphabet: Alphabet::AlphaNum,
+            },
+            RotateOpts { backup: false },
+        )
+        .unwrap();
+    // After single rotate the password is strong (24-char alpha-num),
+    // so weak no longer matches. Edit it back to a weak value via
+    // set_field so the bulk predicate selects it again.
+    vault
+        .set_field(
+            entry_path,
+            EntryField::Password,
+            EntryFieldValue::Protected("123"),
+        )
+        .unwrap();
+    vault.save().unwrap();
+    let baseline = {
+        let reopened = kdbx::Database::open(&dest, "pw", None).unwrap();
+        reopened.entry_by_path(entry_path).unwrap().history_count()
+    };
+
+    let (_, rotated) = vault
+        .rotate_entries(
+            &BulkRotateFilter {
+                weak: true,
+                stale: false,
+                reused: false,
+            },
+            &PasswordPolicy::default(),
+            RotateOpts { backup: false },
+        )
+        .unwrap();
+    assert_eq!(rotated, vec!["Weak".to_owned()]);
+    drop(vault);
+
+    let reopened = kdbx::Database::open(&dest, "pw", None).unwrap();
+    let count = reopened.entry_by_path(entry_path).unwrap().history_count();
+    assert_eq!(
+        count,
+        baseline + 1,
+        "bulk rotate must add exactly one history version on top of pre-existing history",
+    );
 }

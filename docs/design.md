@@ -182,8 +182,9 @@ freekee rotate cipher --db <path> --to chacha20
 freekee rotate kdbx-version --db <path> --to 4
 freekee rotate keyfile --db <path> [--remove | --new-keyfile <new-keyfile>]
 freekee rotate entry --db <path> <entry>     # regenerate single entry's password
-freekee rotate entries --db <path> --where 'reused | stale | weak'
+freekee rotate entries --db <path> [--reused] [--stale] [--weak] [--dry-run]
                                              # bulk-regenerate matching entries
+                                             # (at least one predicate flag required)
 
 # Sync hygiene
 freekee diff <a> <b>

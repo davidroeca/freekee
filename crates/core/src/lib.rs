@@ -12,7 +12,7 @@ pub use backup::BackupOutcome;
 pub use config::Config;
 pub use error::{Error, Result};
 pub use password::{Alphabet, PasswordPolicy};
-pub use vault::{EntryView, HistoryView, ListFilter, RotateOpts, Vault};
+pub use vault::{BulkRotateFilter, EntryView, HistoryView, ListFilter, RotateOpts, Vault};
 
 /// Defaults applied to a database created via [`Vault::create`] when
 /// the caller doesn't override them. Chosen to match KeePassXC's

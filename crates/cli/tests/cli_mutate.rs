@@ -839,6 +839,170 @@ fn rotate_entry_replaces_password_silently_unless_print_flag() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// `rotate entries` - bulk regeneration filtered by audit predicates.
+// ---------------------------------------------------------------------------
+
+fn seed_with_password(path: &Path, master: &str, title: &str, password: &str) {
+    let mut vault = Vault::create(
+        path,
+        Zeroizing::new(master.to_owned()),
+        None,
+        tiny_template(),
+        false,
+    )
+    .unwrap();
+    vault
+        .upsert_entry(
+            EntryPath { groups: &[], title },
+            EntryDraft {
+                username: Some("alice"),
+                password: Some(password),
+                ..EntryDraft::default()
+            },
+        )
+        .unwrap();
+    vault.save().unwrap();
+}
+
+fn append_entry(path: &Path, master: &str, title: &str, password: &str) {
+    let mut vault = Vault::open(path, Zeroizing::new(master.to_owned()), None).unwrap();
+    vault
+        .upsert_entry(
+            EntryPath { groups: &[], title },
+            EntryDraft {
+                username: Some("bob"),
+                password: Some(password),
+                ..EntryDraft::default()
+            },
+        )
+        .unwrap();
+    vault.save().unwrap();
+}
+
+#[test]
+fn rotate_entries_weak_only_lists_rotated_paths_and_replaces_password() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    seed_with_password(&dest, "rot-bulk-pw", "weakling", "123456");
+
+    let assert = freekee()
+        .arg("rotate")
+        .arg("entries")
+        .arg("--db")
+        .arg(&dest)
+        .arg("--weak")
+        .arg("--pass-stdin")
+        .write_stdin("rot-bulk-pw\n")
+        .assert()
+        .success();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout).into_owned();
+    assert!(
+        stdout.contains("weakling"),
+        "rotated entry path must appear in stdout: {stdout}"
+    );
+
+    let db = kdbx::Database::open(&dest, "rot-bulk-pw", None).unwrap();
+    let new_pw = db
+        .entry_by_path(EntryPath {
+            groups: &[],
+            title: "weakling",
+        })
+        .unwrap()
+        .password()
+        .unwrap()
+        .to_owned();
+    assert_ne!(new_pw, "123456");
+    assert!(
+        !stdout.contains(&new_pw),
+        "new password must not appear in stdout (no --print-generated for bulk): {stdout}"
+    );
+    assert!(
+        !stdout.contains("123456"),
+        "prior plaintext password must not appear in stdout: {stdout}"
+    );
+}
+
+#[test]
+fn rotate_entries_combined_weak_and_reused_dedup_rotates_each_once() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    // Two entries sharing the same weak password: matched by both
+    // predicates simultaneously. Bulk rotate must dedup so each entry
+    // gains exactly one history snapshot, not two.
+    seed_with_password(&dest, "dedup-pw", "Mail", "weak123");
+    append_entry(&dest, "dedup-pw", "Calendar", "weak123");
+
+    freekee()
+        .arg("rotate")
+        .arg("entries")
+        .arg("--db")
+        .arg(&dest)
+        .arg("--weak")
+        .arg("--reused")
+        .arg("--pass-stdin")
+        .write_stdin("dedup-pw\n")
+        .assert()
+        .success();
+
+    let db = kdbx::Database::open(&dest, "dedup-pw", None).unwrap();
+    for title in ["Mail", "Calendar"] {
+        let e = db.entry_by_path(EntryPath { groups: &[], title }).unwrap();
+        assert_eq!(
+            e.history_count(),
+            1,
+            "entry `{title}` must have one history snapshot from one rotation, not two"
+        );
+    }
+}
+
+#[test]
+fn rotate_entries_dry_run_lists_matches_without_modifying_file() {
+    use std::fs;
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    seed_with_password(&dest, "dry-pw", "weakling", "abc");
+
+    let mtime_before = fs::metadata(&dest).unwrap().modified().unwrap();
+
+    let assert = freekee()
+        .arg("rotate")
+        .arg("entries")
+        .arg("--db")
+        .arg(&dest)
+        .arg("--weak")
+        .arg("--dry-run")
+        .arg("--pass-stdin")
+        .write_stdin("dry-pw\n")
+        .assert()
+        .success()
+        .stdout(contains("weakling"));
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout).into_owned();
+    assert!(
+        stdout.contains("dry-run") || stdout.contains("dry run") || stdout.contains("Would rotate"),
+        "dry-run output must mark itself as a preview: {stdout}"
+    );
+
+    let mtime_after = fs::metadata(&dest).unwrap().modified().unwrap();
+    assert_eq!(
+        mtime_before, mtime_after,
+        "dry-run must not modify the database file"
+    );
+
+    // And the entry's password is unchanged on disk.
+    let db = kdbx::Database::open(&dest, "dry-pw", None).unwrap();
+    let pw = db
+        .entry_by_path(EntryPath {
+            groups: &[],
+            title: "weakling",
+        })
+        .unwrap()
+        .password()
+        .unwrap()
+        .to_owned();
+    assert_eq!(pw, "abc", "dry-run must leave the password untouched");
+}
+
 #[test]
 fn rotate_entry_print_generated_flag_echoes_new_password() {
     let tmp = tempfile::tempdir().unwrap();

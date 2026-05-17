@@ -6,6 +6,7 @@
 mod rules;
 mod strength;
 
+pub use rules::entries_select::{reused_entry_targets, stale_entry_targets, weak_entry_targets};
 pub use strength::passphrase_bits;
 
 use serde::Serialize;

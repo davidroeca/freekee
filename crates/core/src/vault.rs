@@ -48,6 +48,21 @@ impl Default for RotateOpts {
     }
 }
 
+/// Predicate selector for [`Vault::rotate_entries`]. Each `true` field
+/// enables the corresponding audit predicate; the union of all enabled
+/// predicates (OR-combined and deduplicated by entry path) is what
+/// rotates. All-`false` is legal at the type level but the CLI requires
+/// at least one to be set.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct BulkRotateFilter {
+    /// Entries flagged by `audit::reused_entry_targets`.
+    pub reused: bool,
+    /// Entries flagged by `audit::stale_entry_targets`.
+    pub stale: bool,
+    /// Entries flagged by `audit::weak_entry_targets`.
+    pub weak: bool,
+}
+
 /// Filter passed to [`Vault::list`]. Each field is an optional
 /// case-insensitive substring; multiple fields are AND-combined. An
 /// empty filter (the default) matches every entry.
@@ -381,6 +396,100 @@ impl Vault {
         )?;
         let pw = self.password.clone();
         self.save_and_verify_with_backup(opts.backup, &pw)
+    }
+
+    /// Bulk-regenerate passwords for every entry that matches at least
+    /// one selected audit predicate (weak / stale / reused). All matched
+    /// entries are mutated in memory, then a **single**
+    /// `save_and_verify_with_backup` runs at the end — do not "fix" this
+    /// to save per-entry; that would multiply the Argon2 verify cost by
+    /// the match count and slow large vaults by orders of magnitude.
+    ///
+    /// Predicate sources are `audit::weak_entry_targets`,
+    /// `audit::stale_entry_targets`, and `audit::reused_entry_targets`,
+    /// all using `AuditConfig::default()` thresholds. CLI threshold
+    /// override flags are out of scope for v1.
+    ///
+    /// Returns the rotation outcome and the sorted list of rotated
+    /// entry paths (`<group>/<title>` strings). New passwords are never
+    /// surfaced — fetch via [`Vault::get_password`] when explicit opt-in
+    /// is required.
+    ///
+    /// Empty-match path: returns `(BackupOutcome { changed: false,
+    /// backup_path: None }, vec![])` without invoking save, so no file
+    /// mtime change and no backup is written.
+    pub fn rotate_entries(
+        &mut self,
+        filter: &BulkRotateFilter,
+        policy: &PasswordPolicy,
+        opts: RotateOpts,
+    ) -> Result<(BackupOutcome, Vec<String>)> {
+        let matches = self.bulk_rotate_targets(filter);
+
+        if matches.is_empty() {
+            return Ok((
+                BackupOutcome {
+                    changed: false,
+                    backup_path: None,
+                },
+                Vec::new(),
+            ));
+        }
+
+        let mut rotated_paths = Vec::with_capacity(matches.len());
+        for (group_path, title) in &matches {
+            let groups: Vec<&str> = group_path.iter().map(String::as_str).collect();
+            let path = EntryPath {
+                groups: &groups,
+                title,
+            };
+            let new_pw = policy.generate();
+            self.db.set_entry_field(
+                path,
+                EntryField::Password,
+                EntryFieldValue::Protected(new_pw.as_str()),
+            )?;
+            let mut joined = group_path.clone();
+            joined.push(title.clone());
+            rotated_paths.push(joined.join("/"));
+        }
+
+        let pw = self.password.clone();
+        let outcome = self.save_and_verify_with_backup(opts.backup, &pw)?;
+        Ok((outcome, rotated_paths))
+    }
+
+    /// Sorted `<group>/<title>` paths for every entry the matching
+    /// `BulkRotateFilter` would rotate. Read-only; used by the CLI's
+    /// `--dry-run` to preview `rotate_entries`. The implementation is
+    /// the same predicate union + dedup logic that `rotate_entries`
+    /// uses, so a dry-run is a faithful preview.
+    pub fn bulk_rotate_preview(&self, filter: &BulkRotateFilter) -> Vec<String> {
+        self.bulk_rotate_targets(filter)
+            .into_iter()
+            .map(|(group_path, title)| {
+                let mut joined = group_path;
+                joined.push(title);
+                joined.join("/")
+            })
+            .collect()
+    }
+
+    fn bulk_rotate_targets(&self, filter: &BulkRotateFilter) -> Vec<(Vec<String>, String)> {
+        let cfg = audit::AuditConfig::default();
+        let mut matches: Vec<(Vec<String>, String)> = Vec::new();
+        if filter.weak {
+            matches.extend(audit::weak_entry_targets(&self.db, &cfg));
+        }
+        if filter.stale {
+            matches.extend(audit::stale_entry_targets(&self.db, &cfg));
+        }
+        if filter.reused {
+            matches.extend(audit::reused_entry_targets(&self.db));
+        }
+        matches.sort();
+        matches.dedup();
+        matches
     }
 
     /// Replace the database's KDF parameters (Argon2id) and re-save.

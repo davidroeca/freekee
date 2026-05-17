@@ -3,6 +3,7 @@
 //! the shared backup / save / verify / rollback tail.
 
 pub mod cipher;
+pub mod entries;
 pub mod entry;
 pub mod format;
 pub mod kdf;
@@ -28,6 +29,8 @@ pub enum RotateCmd {
     Kdf(kdf::Args),
     /// Generate a fresh password for an entry.
     Entry(entry::Args),
+    /// Bulk-regenerate passwords for entries flagged by audit predicates.
+    Entries(entries::Args),
     /// Add, replace, or remove the keyfile composite.
     Keyfile(keyfile::Args),
     /// Change the outer and/or inner cipher.
@@ -42,6 +45,7 @@ pub fn run(args: Args) -> anyhow::Result<ExitCode> {
         RotateCmd::KdfParams(a) => kdf_params::run(a),
         RotateCmd::Kdf(a) => kdf::run(a),
         RotateCmd::Entry(a) => entry::run(a),
+        RotateCmd::Entries(a) => entries::run(a),
         RotateCmd::Keyfile(a) => keyfile::run(a),
         RotateCmd::Cipher(a) => cipher::run(a),
         RotateCmd::Format(a) => format::run(a),

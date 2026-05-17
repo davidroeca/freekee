@@ -463,6 +463,11 @@ impl Database {
             let mut parent = self.inner.group_mut(parent_id).ok_or(Error::NotFound)?;
             let mut new_group = parent.add_group();
             new_group.name = path.segments[i - 1].to_string();
+            // Mirror the `add_entry` icon defaulting (see line 318): groups
+            // born after `apply_keepassxc_defaults` ran inherit `icon: None`,
+            // which round-trips back as `Some(BuiltIn(0))` after the next
+            // save and breaks structural equality. Set the default eagerly.
+            new_group.set_icon_builtin(0);
         }
         Ok(())
     }

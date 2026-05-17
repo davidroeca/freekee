@@ -34,7 +34,9 @@ Verify = a file we wrote can be re-opened by `keepassxc-cli` (gated on the `keep
    3. (Cosmetic, warnings-only) Casing drift on `<DefaultUserName>`, `<DefaultUserNameChanged>`, `<ProtectUserName>` - keepass-rs writes them as `Username` (lowercase n). KeePassXC ignores them as unknown elements. Not yet fixed upstream.
    4. `cs_opt_fromstr` numeric fields (`IconID`, `UsageCount`, `MaintenanceHistoryDays`, etc.) - **not fixed upstream**; `None` still serializes as `<Tag></Tag>`. Worked around in our `pre_save_normalize()`.
 
-3. **KDBX minor version normalized to 0 on parse.** `Database::config.version` always reports `KDB4(0)` after parsing, regardless of whether the file header says `KDB4(0)` or `KDB4(1)`. Visible via `cargo run --features dump-expected --bin dump-expected` against the `empty` fixture (header is KDBX 4.1, dump reports `kdb4.0`). Cosmetic for round-trip - both directions read consistently - but means our own writes are always emitted as KDBX 4.0. Suitable for a follow-up upstream issue (not yet filed).
+3. **Empty / whitespace-only field values dropped on round-trip.** Surfaced by `crates/kdbx/tests/proptest_roundtrip.rs`: an entry whose fields hold empty strings (or whose title is whitespace-only) reads back with `fields: {}` after save → reopen. Upstream serializer normalizes empty `<Value></Value>` away on write, and the parser appears to trim whitespace-only titles on read. Worked around in the proptest by requiring at least one non-whitespace char in every generated field value. Not yet filed upstream; do so before re-widening the proptest strategy.
+
+4. **KDBX minor version normalized to 0 on parse.** `Database::config.version` always reports `KDB4(0)` after parsing, regardless of whether the file header says `KDB4(0)` or `KDB4(1)`. Visible via `cargo run --features dump-expected --bin dump-expected` against the `empty` fixture (header is KDBX 4.1, dump reports `kdb4.0`). Cosmetic for round-trip - both directions read consistently - but means our own writes are always emitted as KDBX 4.0. Suitable for a follow-up upstream issue (not yet filed).
 
 ## Mutation-path semantics (M1)
 

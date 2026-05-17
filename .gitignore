@@ -1,9 +1,7 @@
-# ─────────────────────────────────────────────────────────────
 # freekee .gitignore
 # Rust workspace + Tauri 2 (desktop + iOS/Android) + Bun frontend
-# ─────────────────────────────────────────────────────────────
 
-# ── Rust ──────────────────────────────────────────────────────
+# Rust
 target/
 **/target/
 **/*.rs.bk
@@ -14,10 +12,14 @@ Cargo.lock.bak
 # Uncomment if this repo only produces libraries:
 # Cargo.lock
 
+# proptest - reconsider if a future proptest legitimately needs persisted seeds
+# (e.g., an expensive case that proptest can't reliably re-shrink)
+**/*.proptest-regressions
+
 # rust-analyzer / IDE artifacts in target dirs
 **/rust-project.json
 
-# ── Fuzzing ───────────────────────────────────────────────────
+# Fuzzing
 fuzz/target/
 fuzz/artifacts/
 fuzz/coverage/
@@ -26,7 +28,7 @@ fuzz/corpus/**/crash-*
 fuzz/corpus/**/leak-*
 fuzz/corpus/**/timeout-*
 
-# ── Bun / Node (Tauri frontend) ───────────────────────────────
+# Bun / Node (Tauri frontend)
 node_modules/
 **/node_modules/
 
@@ -79,7 +81,7 @@ app/src-tauri/.tauri/
 *.tauri.pem
 ~/.tauri/
 
-# ── iOS / Xcode ───────────────────────────────────────────────
+# iOS / Xcode
 **/*.xcodeproj/xcuserdata/
 **/*.xcodeproj/project.xcworkspace/xcuserdata/
 **/*.xcworkspace/xcuserdata/
@@ -109,7 +111,7 @@ ExportOptions.plist
 DerivedData/
 **/DerivedData/
 
-# ── Android ───────────────────────────────────────────────────
+# Android
 *.iml
 .gradle/
 **/.gradle/
@@ -125,7 +127,7 @@ android/app/debug/
 *.keystore
 keystore.properties
 
-# ── Secrets / environment ─────────────────────────────────────
+# Secrets / environment
 .env
 .env.*
 !.env.example
@@ -159,7 +161,7 @@ secrets/
 *.freekee-bak-*
 *sync-conflict*
 
-# ── Logs / coverage / profiling ───────────────────────────────
+# Logs / coverage / profiling
 *.log
 logs/
 coverage/
@@ -176,7 +178,7 @@ flamegraph.svg
 perf.data*
 *.dSYM/
 
-# ── Editor / IDE ──────────────────────────────────────────────
+# Editor / IDE
 .vscode/
 !.vscode/settings.json.example
 !.vscode/extensions.json
@@ -184,7 +186,6 @@ perf.data*
 *.swp
 *.swo
 *~
-.DS_Store
 Thumbs.db
 desktop.ini
 
@@ -196,7 +197,7 @@ desktop.ini
 result
 result-*
 
-# ── OS junk ───────────────────────────────────────────────────
+# OS junk
 .DS_Store
 .AppleDouble
 .LSOverride
@@ -205,7 +206,7 @@ result-*
 .Trashes
 ehthumbs.db
 
-# ── Misc build/tooling ────────────────────────────────────────
+# Misc build/tooling
 *.bak
 *.tmp
 *.orig

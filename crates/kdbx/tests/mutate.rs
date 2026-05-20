@@ -622,3 +622,174 @@ fn keepassxc_can_open_kdbx3_after_format_rotation() {
 
     assert_keepassxc_db_info_accepts(&dest, &pass);
 }
+
+// ---------------------------------------------------------------------------
+// `set_entry_expiry` primitive: write both `times.expires` and
+// `times.expiry` together, snapshot history, persist through reopen.
+// Powers the upcoming `freekee fix --extend-expiry-days N` flow.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn set_entry_expiry_some_persists_after_save_and_reopen() {
+    let mut db = Database::new_empty(tiny_template());
+    db.add_entry(
+        EntryPath {
+            groups: &[],
+            title: "Token",
+        },
+        EntryDraft {
+            password: Some("hunter2"),
+            ..EntryDraft::default()
+        },
+    )
+    .unwrap();
+
+    let target = chrono::NaiveDate::from_ymd_opt(2027, 1, 15)
+        .unwrap()
+        .and_hms_opt(12, 0, 0)
+        .unwrap();
+    db.set_entry_expiry(
+        EntryPath {
+            groups: &[],
+            title: "Token",
+        },
+        Some(target),
+    )
+    .unwrap();
+
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("expiry.kdbx");
+    db.save(&path, "test-passphrase", None).unwrap();
+
+    let reopened = Database::open(&path, "test-passphrase", None).unwrap();
+    let entry = reopened
+        .entry_by_path(EntryPath {
+            groups: &[],
+            title: "Token",
+        })
+        .expect("entry survives save+reopen");
+    assert_eq!(
+        entry.expires_at(),
+        Some(target),
+        "expires_at must reflect the value set via set_entry_expiry"
+    );
+}
+
+#[test]
+fn set_entry_expiry_none_clears_expires_flag() {
+    let mut db = Database::new_empty(tiny_template());
+    db.add_entry(
+        EntryPath {
+            groups: &[],
+            title: "Token",
+        },
+        EntryDraft::default(),
+    )
+    .unwrap();
+    let target = chrono::NaiveDate::from_ymd_opt(2027, 1, 15)
+        .unwrap()
+        .and_hms_opt(0, 0, 0)
+        .unwrap();
+    // First set an expiry, then clear it.
+    db.set_entry_expiry(
+        EntryPath {
+            groups: &[],
+            title: "Token",
+        },
+        Some(target),
+    )
+    .unwrap();
+    db.set_entry_expiry(
+        EntryPath {
+            groups: &[],
+            title: "Token",
+        },
+        None,
+    )
+    .unwrap();
+
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("cleared.kdbx");
+    db.save(&path, "test-passphrase", None).unwrap();
+    let reopened = Database::open(&path, "test-passphrase", None).unwrap();
+    let entry = reopened
+        .entry_by_path(EntryPath {
+            groups: &[],
+            title: "Token",
+        })
+        .unwrap();
+    assert_eq!(
+        entry.expires_at(),
+        None,
+        "expires_at must read None after set_entry_expiry(None) (the \
+         expires flag flipped to false; entry is not expirable)"
+    );
+}
+
+#[test]
+fn set_entry_expiry_snapshots_history() {
+    let mut db = Database::new_empty(tiny_template());
+    db.add_entry(
+        EntryPath {
+            groups: &[],
+            title: "Token",
+        },
+        EntryDraft::default(),
+    )
+    .unwrap();
+    // Baseline: a freshly-added entry has zero history versions.
+    let baseline = db
+        .entry_by_path(EntryPath {
+            groups: &[],
+            title: "Token",
+        })
+        .unwrap()
+        .history_count();
+
+    let target = chrono::NaiveDate::from_ymd_opt(2027, 1, 15)
+        .unwrap()
+        .and_hms_opt(0, 0, 0)
+        .unwrap();
+    db.set_entry_expiry(
+        EntryPath {
+            groups: &[],
+            title: "Token",
+        },
+        Some(target),
+    )
+    .unwrap();
+
+    let entry = db
+        .entry_by_path(EntryPath {
+            groups: &[],
+            title: "Token",
+        })
+        .unwrap();
+    assert_eq!(
+        entry.history_count(),
+        baseline + 1,
+        "edit_tracking must snapshot the prior entry state into history"
+    );
+}
+
+#[test]
+fn set_entry_expiry_not_found_returns_error() {
+    let mut db = Database::new_empty(tiny_template());
+    let target = chrono::NaiveDate::from_ymd_opt(2027, 1, 15)
+        .unwrap()
+        .and_hms_opt(0, 0, 0)
+        .unwrap();
+    let err = db
+        .set_entry_expiry(
+            EntryPath {
+                groups: &[],
+                title: "Nonexistent",
+            },
+            Some(target),
+        )
+        .expect_err("set_entry_expiry on a missing entry must fail");
+    assert!(
+        matches!(err, kdbx::Error::NotFound),
+        "expected Error::NotFound, got {err:?}"
+    );
+}

@@ -360,6 +360,37 @@ impl Database {
         Ok(())
     }
 
+    /// Set or clear the expiry timestamp on the entry at `path`.
+    ///
+    /// `Some(ts)` sets both `times.expires = true` and `times.expiry =
+    /// ts` so the entry is treated as expirable and the reader at
+    /// [`Entry::expires_at`] yields the new value. `None` flips
+    /// `times.expires` to `false`, leaving any prior `expiry`
+    /// timestamp in place but marking the entry as non-expirable.
+    ///
+    /// Routes through upstream `EntryMut::edit_tracking` so the prior
+    /// version snapshots into history and `times.last_modification`
+    /// stamps automatically — same semantics as `set_entry_field`.
+    pub fn set_entry_expiry(
+        &mut self,
+        path: EntryPath<'_>,
+        expiry: Option<chrono::NaiveDateTime>,
+    ) -> Result<()> {
+        let group_id = self.resolve_group_id(path.groups)?;
+        let entry_id = self.resolve_entry_id(group_id, path.title)?;
+        let mut entry = self.inner.entry_mut(entry_id).ok_or(Error::NotFound)?;
+        entry.edit_tracking(|t| match expiry {
+            Some(ts) => {
+                t.times.expires = Some(true);
+                t.times.expiry = Some(ts);
+            }
+            None => {
+                t.times.expires = Some(false);
+            }
+        });
+        Ok(())
+    }
+
     /// Remove the entry at `path`, registering its UUID in
     /// `deleted_objects` so KeePassXC sync will respect the deletion
     /// rather than resurrecting it on next merge.

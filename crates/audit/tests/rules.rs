@@ -30,6 +30,158 @@ fn strong_database_yields_no_findings() {
     assert_eq!(findings, vec![], "no findings expected; got {findings:?}");
 }
 
+// Finding.entry_path: DB-level rules leave it None; JSON omits it when None.
+
+#[test]
+fn db_level_findings_have_no_entry_path() {
+    let database = db(|cfg| {
+        cfg.outer_cipher_config = OuterCipherConfig::Twofish;
+        cfg.kdf_config = strong_kdf();
+    });
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
+    let f = findings
+        .iter()
+        .find(|f| f.rule == "weak-outer-cipher")
+        .expect("expected weak-outer-cipher finding");
+    assert!(
+        f.entry_path.is_none(),
+        "db-level findings must leave entry_path == None"
+    );
+}
+
+#[test]
+fn finding_json_omits_entry_path_when_none() {
+    let database = db(|cfg| {
+        cfg.outer_cipher_config = OuterCipherConfig::Twofish;
+        cfg.kdf_config = strong_kdf();
+    });
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
+    let f = findings
+        .iter()
+        .find(|f| f.rule == "weak-outer-cipher")
+        .expect("expected weak-outer-cipher finding");
+    let json = serde_json::to_string(&f).expect("serialize finding");
+    assert!(
+        !json.contains("entry_path"),
+        "entry_path must be omitted from JSON when None; got: {json}"
+    );
+}
+
+#[test]
+fn weak_entry_password_finding_carries_entry_path() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    {
+        let mut root = inner.root_mut();
+        let mut sub = root.add_group();
+        sub.name = "Web".into();
+        let mut entry = sub.add_entry();
+        entry.set_unprotected(keepass::db::fields::TITLE, "Forum");
+        entry.set_protected(keepass::db::fields::PASSWORD, "qwerty");
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
+    let f = findings
+        .iter()
+        .find(|f| f.rule == "weak-entry-password")
+        .expect("expected weak-entry-password finding");
+    assert_eq!(
+        f.entry_path.as_deref(),
+        Some(&["Web".to_string(), "Forum".to_string()][..]),
+        "per-entry finding must carry full [groups..., title] path",
+    );
+}
+
+#[test]
+fn stale_password_finding_carries_entry_path() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    let modified = chrono::Utc::now().naive_utc() - chrono::Duration::days(400);
+    {
+        let mut root = inner.root_mut();
+        let mut entry = root.add_entry();
+        entry.set_unprotected(keepass::db::fields::TITLE, "Bank");
+        entry.set_protected(
+            keepass::db::fields::PASSWORD,
+            "Strong-Stale-Password-2026!Aa9",
+        );
+        entry.times.last_modification = Some(modified);
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
+    let f = findings
+        .iter()
+        .find(|f| f.rule == "stale-password")
+        .expect("expected stale-password finding");
+    assert_eq!(
+        f.entry_path.as_deref(),
+        Some(&["Bank".to_string()][..]),
+        "entry at root has entry_path == [title] only",
+    );
+}
+
+#[test]
+fn expired_entry_finding_carries_entry_path() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    {
+        let mut root = inner.root_mut();
+        let mut sub = root.add_group();
+        sub.name = "Keys".into();
+        let mut entry = sub.add_entry();
+        entry.set_unprotected(keepass::db::fields::TITLE, "Old API Token");
+        entry.set_protected(
+            keepass::db::fields::PASSWORD,
+            "Some-Strong-Password-2026!Aa9",
+        );
+        entry.times.expires = Some(true);
+        entry.times.expiry = Some(
+            chrono::NaiveDate::from_ymd_opt(2020, 1, 1)
+                .unwrap()
+                .and_hms_opt(0, 0, 0)
+                .unwrap(),
+        );
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
+    let f = findings
+        .iter()
+        .find(|f| f.rule == "expired-entry-overdue")
+        .expect("expected expired-entry-overdue finding");
+    assert_eq!(
+        f.entry_path.as_deref(),
+        Some(&["Keys".to_string(), "Old API Token".to_string()][..]),
+    );
+}
+
 // A1: weak-outer-cipher
 
 #[test]
@@ -403,27 +555,85 @@ fn flags_reused_password_across_two_entries() {
         CompositeKeyInfo::Untracked,
         &AuditConfig::default(),
     );
-    let f = findings
+    let reused: Vec<_> = findings
         .iter()
-        .find(|f| f.rule == "reused-password")
-        .expect("expected reused-password finding");
-    assert_eq!(f.severity, Severity::Medium);
+        .filter(|f| f.rule == "reused-password")
+        .collect();
+    assert_eq!(
+        reused.len(),
+        2,
+        "expected one finding per member of a 2-entry reused group",
+    );
+    let titles_seen: std::collections::BTreeSet<_> = reused
+        .iter()
+        .filter_map(|f| f.entry_path.as_ref().and_then(|p| p.last()).cloned())
+        .collect();
+    assert_eq!(
+        titles_seen,
+        ["Calendar", "Mail"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<std::collections::BTreeSet<_>>(),
+        "each finding must carry its own entry_path",
+    );
+    for f in &reused {
+        assert_eq!(f.severity, Severity::Medium);
+        assert!(
+            !f.message.contains(shared),
+            "reused password plaintext leaked into finding message: {}",
+            f.message,
+        );
+        assert!(
+            !f.remediation.contains(shared),
+            "reused password plaintext leaked into remediation: {}",
+            f.remediation,
+        );
+        assert!(!f.citation.is_empty(), "citation must be populated");
+    }
+}
+
+#[test]
+fn reused_password_finding_message_cites_other_members() {
+    let mut inner = keepass::Database::new();
+    inner.config.kdf_config = strong_kdf();
+    let shared = "Shared-Password-Across-Three-Entries-2026";
+    for title in ["Mail", "Calendar", "Drive"] {
+        let mut root = inner.root_mut();
+        let mut e = root.add_entry();
+        e.set_unprotected(keepass::db::fields::TITLE, title);
+        e.set_protected(keepass::db::fields::PASSWORD, shared);
+    }
+    let database = kdbx::Database::__from_keepass(inner);
+
+    let findings = audit::run(
+        &database,
+        STRONG_PASSPHRASE,
+        CompositeKeyInfo::Untracked,
+        &AuditConfig::default(),
+    );
+    let mail = findings
+        .iter()
+        .find(|f| {
+            f.rule == "reused-password"
+                && f.entry_path
+                    .as_ref()
+                    .and_then(|p| p.last())
+                    .is_some_and(|t| t == "Mail")
+        })
+        .expect("Mail's reused-password finding");
+    // The Mail finding's message should reference the *other* sharers
+    // (Calendar, Drive) but NOT itself, so the user sees who they share
+    // their password with.
     assert!(
-        f.message.contains("Mail") && f.message.contains("Calendar"),
-        "finding should cite both entries; got: {}",
-        f.message,
+        mail.message.contains("Calendar"),
+        "expected Mail's finding to cite Calendar; got: {}",
+        mail.message,
     );
     assert!(
-        !f.message.contains(shared),
-        "reused password plaintext leaked into finding message: {}",
-        f.message,
+        mail.message.contains("Drive"),
+        "expected Mail's finding to cite Drive; got: {}",
+        mail.message,
     );
-    assert!(
-        !f.remediation.contains(shared),
-        "reused password plaintext leaked into remediation: {}",
-        f.remediation,
-    );
-    assert!(!f.citation.is_empty(), "citation must be populated");
 }
 
 #[test]
@@ -460,7 +670,7 @@ fn does_not_flag_unique_passwords() {
 }
 
 #[test]
-fn reused_password_groups_three_or_more_entries_in_one_finding() {
+fn reused_password_emits_one_finding_per_member_of_group() {
     let mut inner = keepass::Database::new();
     inner.config.kdf_config = strong_kdf();
     let shared = "Triple-Reuse-Password-2026!Zz9";
@@ -484,12 +694,21 @@ fn reused_password_groups_three_or_more_entries_in_one_finding() {
         .collect();
     assert_eq!(
         reused.len(),
-        1,
-        "expected exactly one finding for one shared password (got {})",
-        reused.len(),
+        3,
+        "expected one finding per member of the 3-entry reused group",
     );
-    let msg = &reused[0].message;
-    assert!(msg.contains('A') && msg.contains('B') && msg.contains('C'));
+    let titles_seen: std::collections::BTreeSet<_> = reused
+        .iter()
+        .filter_map(|f| f.entry_path.as_ref().and_then(|p| p.last()).cloned())
+        .collect();
+    assert_eq!(
+        titles_seen,
+        ["A", "B", "C"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<std::collections::BTreeSet<_>>(),
+        "each member must produce its own finding with its own entry_path",
+    );
 }
 
 #[test]
@@ -521,7 +740,11 @@ fn reused_password_separates_findings_by_password() {
         .iter()
         .filter(|f| f.rule == "reused-password")
         .count();
-    assert_eq!(reused, 2, "expected one finding per shared password");
+    // Two distinct shared passwords, two members each ⇒ 4 findings.
+    assert_eq!(
+        reused, 4,
+        "expected one finding per member across all shared-password groups",
+    );
 }
 
 #[test]

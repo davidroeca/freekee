@@ -17,5 +17,6 @@ pub fn legacy_kdbx_version(db: &kdbx::Database) -> Option<Finding> {
         ),
         citation: "https://keepass.info/help/kb/kdbx_4.html",
         remediation: "freekee rotate kdbx-version <path> --to 4".into(),
+        entry_path: None,
     })
 }

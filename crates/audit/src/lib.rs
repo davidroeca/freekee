@@ -33,6 +33,13 @@ pub enum Category {
 
 /// A single audit observation. `remediation` is the exact CLI command
 /// the user can run to address the finding (per design.md section 7.2).
+///
+/// `entry_path` is populated for per-entry rules (weak-entry-password,
+/// reused-password, stale-password, expired-entry-overdue) and left
+/// `None` for database-level rules (cipher / KDF / format / passphrase).
+/// The path is `[group1, ..., groupN, title]`; the CLI joins with `/`
+/// to match `Vault::list` rendering. Serialized field is skipped when
+/// `None` so existing JSON consumers see no change to db-level findings.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Finding {
     pub rule: &'static str,
@@ -41,6 +48,8 @@ pub struct Finding {
     pub message: String,
     pub citation: &'static str,
     pub remediation: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entry_path: Option<Vec<String>>,
 }
 
 /// User-tunable thresholds.

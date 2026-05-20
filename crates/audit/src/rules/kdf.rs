@@ -15,6 +15,7 @@ pub fn legacy_kdf(db: &kdbx::Database) -> Option<Finding> {
                     .into(),
             citation: "https://keepass.info/help/kb/kdbx_4.html",
             remediation: "freekee rotate kdf <path> --to argon2id".into(),
+            entry_path: None,
         }),
         Kdf::Argon2d { .. } | Kdf::Argon2id { .. } => None,
     }
@@ -71,5 +72,6 @@ pub fn weak_argon2_params(db: &kdbx::Database, config: &AuditConfig) -> Option<F
         citation: "https://keepass.info/help/kb/kdbx_4.html",
         remediation:
             "freekee rotate kdf-params <path> --memory 65536 --iterations 10 --parallelism 2".into(),
+        entry_path: None,
     })
 }

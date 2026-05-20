@@ -29,6 +29,7 @@ pub fn large_attachments(db: &kdbx::Database, config: &AuditConfig) -> Vec<Findi
                 remediation: format!(
                     "freekee export attachment <path> --title {title:?}; then remove from the entry"
                 ),
+                entry_path: None,
             });
         }
     }
@@ -55,6 +56,7 @@ pub fn stale_passwords(db: &kdbx::Database, config: &AuditConfig) -> Vec<Finding
             continue;
         }
         let title = entry.title().unwrap_or("(untitled)");
+        let entry_path = build_entry_path(&entry, title);
         findings.push(Finding {
             rule: "stale-password",
             severity: Severity::Low,
@@ -66,9 +68,18 @@ pub fn stale_passwords(db: &kdbx::Database, config: &AuditConfig) -> Vec<Finding
             ),
             citation: "https://csrc.nist.gov/publications/detail/sp/800-63b/final",
             remediation: format!("freekee rotate entry <path> --title {title:?}"),
+            entry_path: Some(entry_path),
         });
     }
     findings
+}
+
+/// Build a `[group1, ..., groupN, title]` path vector for a per-entry
+/// finding. Mirrors how `Vault::list` renders entries via slash-join.
+fn build_entry_path(entry: &kdbx::Entry<'_>, title: &str) -> Vec<String> {
+    let mut path = entry.group_path();
+    path.push(title.to_owned());
+    path
 }
 
 pub fn expired_entries(db: &kdbx::Database) -> Vec<Finding> {
@@ -82,6 +93,7 @@ pub fn expired_entries(db: &kdbx::Database) -> Vec<Finding> {
             continue;
         }
         let title = entry.title().unwrap_or("(untitled)");
+        let entry_path = build_entry_path(&entry, title);
         findings.push(Finding {
             rule: "expired-entry-overdue",
             severity: Severity::Low,
@@ -92,16 +104,19 @@ pub fn expired_entries(db: &kdbx::Database) -> Vec<Finding> {
             ),
             citation: "https://keepass.info/help/base/entries.html#expiry",
             remediation: format!("freekee rotate entry <path> --title {title:?}"),
+            entry_path: Some(entry_path),
         });
     }
     findings
 }
 
 pub fn reused_passwords(db: &kdbx::Database) -> Vec<Finding> {
-    // Group entry titles by their password value. The password string
-    // is used only as a `BTreeMap` key here and never copied into a
-    // `Finding`; the produced finding records only entry titles.
-    let mut by_password: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    // Group entries by their password value, keeping (title, full path)
+    // per member so the per-finding output can name the other sharers.
+    // The password string is used only as a `BTreeMap` key here and is
+    // never copied into a `Finding`; produced findings record only entry
+    // titles and paths.
+    let mut by_password: BTreeMap<String, Vec<(String, Vec<String>)>> = BTreeMap::new();
     for entry in db.entries() {
         let Some(password) = entry.password() else {
             continue;
@@ -110,30 +125,39 @@ pub fn reused_passwords(db: &kdbx::Database) -> Vec<Finding> {
             continue;
         }
         let title = entry.title().unwrap_or("(untitled)").to_owned();
+        let path = build_entry_path(&entry, &title);
         by_password
             .entry(password.to_owned())
             .or_default()
-            .push(title);
+            .push((title, path));
     }
 
     let mut findings = Vec::new();
-    for (_password, titles) in by_password {
-        if titles.len() < 2 {
+    for (_password, members) in by_password {
+        if members.len() < 2 {
             continue;
         }
-        let cited = titles
-            .iter()
-            .map(|t| format!("`{t}`"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        findings.push(Finding {
-            rule: "reused-password",
-            severity: Severity::Medium,
-            category: Category::Entries,
-            message: format!("{} entries share the same password: {cited}.", titles.len(),),
-            citation: "https://csrc.nist.gov/publications/detail/sp/800-63b/final",
-            remediation: "freekee rotate entries <path> --reused".into(),
-        });
+        // Emit one finding per member so the interactive fix loop in
+        // `freekee fix` can iterate uniformly. The message cites the
+        // *other* members so the user sees who they share with.
+        for (i, (title, path)) in members.iter().enumerate() {
+            let others = members
+                .iter()
+                .enumerate()
+                .filter(|(j, _)| *j != i)
+                .map(|(_, (t, _))| format!("`{t}`"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            findings.push(Finding {
+                rule: "reused-password",
+                severity: Severity::Medium,
+                category: Category::Entries,
+                message: format!("Entry `{title}` shares its password with {others}."),
+                citation: "https://csrc.nist.gov/publications/detail/sp/800-63b/final",
+                remediation: format!("freekee rotate entry <path> --title {title:?}"),
+                entry_path: Some(path.clone()),
+            });
+        }
     }
     findings
 }
@@ -152,6 +176,7 @@ pub fn weak_entry_passwords(db: &kdbx::Database, config: &AuditConfig) -> Vec<Fi
             continue;
         }
         let title = entry.title().unwrap_or("(untitled)");
+        let entry_path = build_entry_path(&entry, title);
         findings.push(Finding {
             rule: "weak-entry-password",
             severity: Severity::Medium,
@@ -162,6 +187,7 @@ pub fn weak_entry_passwords(db: &kdbx::Database, config: &AuditConfig) -> Vec<Fi
             ),
             citation: "https://csrc.nist.gov/publications/detail/sp/800-63b/final",
             remediation: format!("freekee rotate entry <path> --title {title:?}"),
+            entry_path: Some(entry_path),
         });
     }
     findings

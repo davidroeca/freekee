@@ -19,6 +19,7 @@ pub fn passphrase_only(composite_key: CompositeKeyInfo) -> Option<Finding> {
             .into(),
         citation: "https://keepass.info/help/base/keys.html",
         remediation: "freekee rotate keyfile <path> --add".into(),
+        entry_path: None,
     })
 }
 
@@ -37,5 +38,6 @@ pub fn weak_passphrase(passphrase: &str, config: &AuditConfig) -> Option<Finding
         ),
         citation: "https://csrc.nist.gov/publications/detail/sp/800-63b/final",
         remediation: "freekee rotate passphrase <path>".into(),
+        entry_path: None,
     })
 }

@@ -23,6 +23,7 @@ pub fn weak_outer_cipher(db: &kdbx::Database) -> Option<Finding> {
                     .into(),
             citation: "https://keepass.info/help/kb/kdbx_4.html",
             remediation: "freekee rotate cipher <path> --to chacha20".into(),
+            entry_path: None,
         }),
     }
 }
@@ -39,6 +40,7 @@ pub fn legacy_stream_cipher(db: &kdbx::Database) -> Option<Finding> {
                 .into(),
             citation: "https://keepass.info/help/kb/kdbx_4.html",
             remediation: "freekee rotate cipher <path> --inner chacha20".into(),
+            entry_path: None,
         }),
         InnerCipher::Plain => None,
     }

@@ -393,6 +393,7 @@ dependencies = [
  "arboard",
  "assert_cmd",
  "audit",
+ "chrono",
  "clap",
  "clap_complete",
  "freekee-core",

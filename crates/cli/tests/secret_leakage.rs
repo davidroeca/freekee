@@ -615,6 +615,75 @@ fn no_canary_substrings_in_any_command_output() {
             );
         }
     }
+
+    // `freekee fix`: interactive remediation loop. The command never
+    // accepts `--print-generated`, so neither the master passphrase,
+    // the prior weak entry plaintext, nor any newly-generated password
+    // may appear in any captured stream.
+    {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let canary = dir.path().join("canary.kdbx");
+        const WEAK_FIX_PW: &str = "WEAK_FIX_CANARY_PRIOR_3d8a";
+        {
+            let mut inner = keepass::Database::new();
+            {
+                let mut root = inner.root_mut();
+                let mut e = root.add_entry();
+                e.set_unprotected(keepass::db::fields::TITLE, "Forum");
+                e.set_protected(keepass::db::fields::PASSWORD, WEAK_FIX_PW);
+            }
+            let mut file = std::fs::File::create(&canary).expect("create");
+            let key = keepass::DatabaseKey::new().with_password(CANARY_PASSPHRASE);
+            inner.save(&mut file, key).expect("save canary");
+        }
+
+        // Stdin: passphrase, then `y` for every prompt up to a safe upper
+        // bound, then `y` for the final confirm. Extra `y` lines past
+        // EOF are harmless.
+        let stdin = format!("{CANARY_PASSPHRASE}\n{}", "y\n".repeat(20));
+        let out = freekee()
+            .arg("fix")
+            .arg("--db")
+            .arg(&canary)
+            .arg("--pass-stdin")
+            .write_stdin(stdin)
+            .output()
+            .expect("run freekee fix");
+        assert!(
+            out.status.success(),
+            "freekee fix must succeed; stderr: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_no_canary_in("fix", &out.stdout, &out.stderr);
+
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !stdout.contains(WEAK_FIX_PW) && !stderr.contains(WEAK_FIX_PW),
+            "prior weak entry plaintext must not leak: stdout={stdout} stderr={stderr}",
+        );
+
+        // Read the (possibly-rotated) new entry password back and assert
+        // it doesn't appear in any stream.
+        let db = kdbx::Database::open(&canary, CANARY_PASSPHRASE, None).unwrap();
+        let new_pw = db
+            .entry_by_path(kdbx::EntryPath {
+                groups: &[],
+                title: "Forum",
+            })
+            .unwrap()
+            .password()
+            .unwrap()
+            .to_owned();
+        assert!(
+            !stdout.contains(&new_pw),
+            "newly-generated entry password must not echo to stdout: {stdout}"
+        );
+        assert!(
+            !stderr.contains(&new_pw),
+            "newly-generated entry password must not echo to stderr: {stderr}"
+        );
+    }
 }
 
 /// Write 64 deterministic-pseudo-random bytes to act as a keyfile in

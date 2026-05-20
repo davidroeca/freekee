@@ -19,6 +19,7 @@ audit = { path = "../audit" }
 clap.workspace = true
 clap_complete.workspace = true
 anyhow.workspace = true
+chrono.workspace = true
 zeroize.workspace = true
 rpassword.workspace = true
 serde_json.workspace = true

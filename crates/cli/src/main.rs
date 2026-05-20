@@ -21,6 +21,8 @@ enum Cmd {
     Verify(cmd::verify::Args),
     /// Run audit rules and print findings.
     Audit(cmd::audit::Args),
+    /// Interactively walk audit findings and apply accepted remediations.
+    Fix(cmd::fix::Args),
     /// List entries by full group/title path.
     Ls(cmd::ls::Args),
     /// Show one entry's fields (password hidden unless --show).
@@ -77,6 +79,7 @@ fn main() -> ExitCode {
         Cmd::Info(args) => cmd::info::run(args),
         Cmd::Verify(args) => cmd::verify::run(args),
         Cmd::Audit(args) => cmd::audit::run(args),
+        Cmd::Fix(args) => cmd::fix::run(args),
         Cmd::Ls(args) => cmd::ls::run(args),
         Cmd::Get(args) => cmd::get::run(args),
         Cmd::History(args) => cmd::history::run(args),

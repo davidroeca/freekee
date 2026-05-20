@@ -32,6 +32,9 @@ pub enum Error {
     #[error("at least one rotation target must be specified")]
     NoRotationTarget,
 
+    #[error("invalid fix batch: {0}")]
+    InvalidFixBatch(&'static str),
+
     #[error("config: {0}")]
     Config(String),
 }

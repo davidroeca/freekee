@@ -9,8 +9,8 @@ use std::fs;
 use std::path::PathBuf;
 
 use freekee_core::{
-    Alphabet, BulkRotateFilter, EntryView, HistoryView, ListFilter, PasswordPolicy, RotateOpts,
-    Vault,
+    Alphabet, BulkRotateFilter, EntryView, FixIntent, HistoryView, ListFilter, PasswordPolicy,
+    RotateOpts, Vault,
 };
 use kdbx::{
     Argon2idParams, EntryDraft, EntryField, EntryFieldValue, EntryPath, InnerCipher,
@@ -1511,6 +1511,485 @@ fn rotate_entries_history_delta_is_plus_one_per_match() {
         baseline + 1,
         "bulk rotate must add exactly one history version on top of pre-existing history",
     );
+}
+
+#[test]
+fn apply_fix_batch_empty_is_noop_no_backup() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("empty-batch.kdbx");
+
+    let mut vault = Vault::create(
+        &dest,
+        Zeroizing::new("pw".to_owned()),
+        None,
+        tiny_template(),
+        false,
+    )
+    .unwrap();
+    let mtime_before = fs::metadata(&dest).unwrap().modified().unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+
+    let report = vault
+        .apply_fix_batch(Vec::<FixIntent>::new(), RotateOpts { backup: true })
+        .unwrap();
+
+    assert!(
+        report.applied.is_empty(),
+        "empty batch must produce empty applied list"
+    );
+    assert!(
+        !report.outcome.changed,
+        "empty batch must short-circuit before save"
+    );
+    assert!(
+        report.outcome.backup_path.is_none(),
+        "empty batch must not write a backup file"
+    );
+    let mtime_after = fs::metadata(&dest).unwrap().modified().unwrap();
+    assert_eq!(
+        mtime_before, mtime_after,
+        "empty batch must leave the file untouched"
+    );
+
+    // No spurious backup file in the parent dir either.
+    let parent = dest.parent().unwrap();
+    let backups: Vec<_> = fs::read_dir(parent)
+        .unwrap()
+        .filter_map(|e| {
+            let e = e.ok()?;
+            e.file_name()
+                .to_string_lossy()
+                .contains("freekee-bak")
+                .then(|| e.path())
+        })
+        .collect();
+    assert!(
+        backups.is_empty(),
+        "empty batch must not produce a backup file; found {backups:?}"
+    );
+}
+
+#[test]
+fn apply_fix_batch_regenerates_entry_password_with_single_save() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("regen.kdbx");
+    let mut vault = Vault::create(
+        &dest,
+        Zeroizing::new("pw".to_owned()),
+        None,
+        tiny_template(),
+        false,
+    )
+    .unwrap();
+    let path_a = EntryPath {
+        groups: &[],
+        title: "Mail",
+    };
+    let path_b = EntryPath {
+        groups: &[],
+        title: "Bank",
+    };
+    vault
+        .upsert_entry(
+            path_a,
+            EntryDraft {
+                password: Some("weak-1"),
+                ..EntryDraft::default()
+            },
+        )
+        .unwrap();
+    vault
+        .upsert_entry(
+            path_b,
+            EntryDraft {
+                password: Some("weak-2"),
+                ..EntryDraft::default()
+            },
+        )
+        .unwrap();
+    vault.save().unwrap();
+    let pw_before_a = vault.get_password(path_a).unwrap();
+    let pw_before_b = vault.get_password(path_b).unwrap();
+    assert_eq!(pw_before_a.as_str(), "weak-1");
+    assert_eq!(pw_before_b.as_str(), "weak-2");
+
+    let intents = vec![
+        FixIntent::RegenerateEntryPassword {
+            path: vec!["Mail".to_string()],
+            policy: PasswordPolicy::default(),
+        },
+        FixIntent::RegenerateEntryPassword {
+            path: vec!["Bank".to_string()],
+            policy: PasswordPolicy::default(),
+        },
+    ];
+    let report = vault
+        .apply_fix_batch(intents, RotateOpts { backup: true })
+        .unwrap();
+
+    assert!(report.outcome.changed, "non-empty batch must save");
+    let backup_path = report
+        .outcome
+        .backup_path
+        .clone()
+        .expect("backup must be produced when backup=true");
+    assert!(
+        backup_path.exists(),
+        "reported backup path must exist on disk"
+    );
+    assert_eq!(
+        report.applied.len(),
+        2,
+        "applied summary must contain one line per intent"
+    );
+
+    // Exactly one backup file in the working dir (not N, where N is the
+    // intent count) — the whole point of batching.
+    let parent = dest.parent().unwrap();
+    let backups: Vec<_> = fs::read_dir(parent)
+        .unwrap()
+        .filter_map(|e| {
+            let e = e.ok()?;
+            e.file_name()
+                .to_string_lossy()
+                .contains("freekee-bak")
+                .then(|| e.path())
+        })
+        .collect();
+    assert_eq!(
+        backups.len(),
+        1,
+        "exactly one backup file should exist after a batch save; found {backups:?}"
+    );
+
+    // Passwords actually changed (we only assert that they're not the
+    // pre-batch values — `PasswordPolicy::default()` generates fresh).
+    let pw_after_a = vault.get_password(path_a).unwrap();
+    let pw_after_b = vault.get_password(path_b).unwrap();
+    assert_ne!(
+        pw_after_a.as_str(),
+        "weak-1",
+        "Mail's password must have been regenerated"
+    );
+    assert_ne!(
+        pw_after_b.as_str(),
+        "weak-2",
+        "Bank's password must have been regenerated"
+    );
+
+    // And the on-disk file was actually re-saved with the new values.
+    drop(vault);
+    let reopened = Vault::open(&dest, Zeroizing::new("pw".to_owned()), None).unwrap();
+    let disk_a = reopened.get_password(path_a).unwrap();
+    let disk_b = reopened.get_password(path_b).unwrap();
+    assert_eq!(disk_a.as_str(), pw_after_a.as_str());
+    assert_eq!(disk_b.as_str(), pw_after_b.as_str());
+}
+
+#[test]
+fn apply_fix_batch_extends_expiry_and_rotates_password_in_one_save() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("mixed.kdbx");
+    let mut vault = Vault::create(
+        &dest,
+        Zeroizing::new("pw".to_owned()),
+        None,
+        tiny_template(),
+        false,
+    )
+    .unwrap();
+    let path = EntryPath {
+        groups: &[],
+        title: "Token",
+    };
+    vault
+        .upsert_entry(
+            path,
+            EntryDraft {
+                password: Some("weak"),
+                ..EntryDraft::default()
+            },
+        )
+        .unwrap();
+    vault.save().unwrap();
+
+    // KDBX timestamps have second precision; use a second-aligned target.
+    let future = chrono::NaiveDate::from_ymd_opt(2027, 6, 1)
+        .unwrap()
+        .and_hms_opt(0, 0, 0)
+        .unwrap();
+    let intents = vec![
+        FixIntent::RegenerateEntryPassword {
+            path: vec!["Token".to_string()],
+            policy: PasswordPolicy::default(),
+        },
+        FixIntent::ExtendEntryExpiry {
+            path: vec!["Token".to_string()],
+            until: future,
+        },
+    ];
+    let report = vault
+        .apply_fix_batch(intents, RotateOpts { backup: true })
+        .unwrap();
+    assert_eq!(report.applied.len(), 2);
+    assert!(report.outcome.changed);
+
+    drop(vault);
+    let reopened = kdbx::Database::open(&dest, "pw", None).unwrap();
+    let entry = reopened.entry_by_path(path).unwrap();
+    assert_ne!(entry.password(), Some("weak"));
+    assert_eq!(entry.expires_at(), Some(future));
+}
+
+#[test]
+fn apply_fix_batch_applies_cipher_kdf_format_in_one_save() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("dblevel.kdbx");
+    // Start from a weaker template so the batch has something to do.
+    let weak_template = NewDatabaseTemplate {
+        kdf: Argon2idParams {
+            memory: 8 * 1024,
+            iterations: 1,
+            parallelism: 1,
+        },
+        outer_cipher: OuterCipher::Aes256,
+        inner_cipher: InnerCipher::Salsa20,
+    };
+    let mut vault = Vault::create(
+        &dest,
+        Zeroizing::new("pw".to_owned()),
+        None,
+        weak_template,
+        false,
+    )
+    .unwrap();
+
+    let new_params = Argon2idParams {
+        memory: 16 * 1024,
+        iterations: 2,
+        parallelism: 1,
+    };
+    let intents = vec![
+        FixIntent::SetOuterCipher(OuterCipher::ChaCha20),
+        FixIntent::SetInnerCipher(InnerCipher::ChaCha20),
+        FixIntent::SetArgon2idParams(new_params),
+        FixIntent::UpgradeFormat,
+    ];
+    let report = vault
+        .apply_fix_batch(intents, RotateOpts { backup: true })
+        .unwrap();
+    assert_eq!(report.applied.len(), 4);
+    assert!(report.outcome.changed);
+
+    drop(vault);
+    let reopened = kdbx::Database::open(&dest, "pw", None).unwrap();
+    assert_eq!(reopened.outer_cipher(), OuterCipher::ChaCha20);
+    assert_eq!(reopened.inner_cipher(), InnerCipher::ChaCha20);
+    match reopened.kdf() {
+        kdbx::Kdf::Argon2id {
+            iterations,
+            memory,
+            parallelism,
+        } => {
+            assert_eq!(iterations, 2);
+            assert_eq!(memory, 16 * 1024);
+            assert_eq!(parallelism, 1);
+        }
+        other => panic!("expected Argon2id with new params, got {other:?}"),
+    }
+
+    // Only ONE backup file despite four intents.
+    let parent = dest.parent().unwrap();
+    let backups: Vec<_> = fs::read_dir(parent)
+        .unwrap()
+        .filter_map(|e| {
+            let e = e.ok()?;
+            e.file_name()
+                .to_string_lossy()
+                .contains("freekee-bak")
+                .then(|| e.path())
+        })
+        .collect();
+    assert_eq!(backups.len(), 1);
+}
+
+#[test]
+fn apply_fix_batch_entry_not_found_errors_before_any_save() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("missing.kdbx");
+    let mut vault = Vault::create(
+        &dest,
+        Zeroizing::new("pw".to_owned()),
+        None,
+        tiny_template(),
+        false,
+    )
+    .unwrap();
+    let mtime_before = fs::metadata(&dest).unwrap().modified().unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+
+    let intents = vec![FixIntent::RegenerateEntryPassword {
+        path: vec!["Ghost".to_string()],
+        policy: PasswordPolicy::default(),
+    }];
+    let err = vault
+        .apply_fix_batch(intents, RotateOpts { backup: true })
+        .expect_err("missing entry must error");
+    assert!(
+        matches!(
+            err,
+            freekee_core::Error::NotFound | freekee_core::Error::Kdbx(_)
+        ),
+        "unexpected error class: {err:?}"
+    );
+
+    let mtime_after = fs::metadata(&dest).unwrap().modified().unwrap();
+    assert_eq!(
+        mtime_before, mtime_after,
+        "failed pre-validation must not touch the file on disk"
+    );
+    let parent = dest.parent().unwrap();
+    let backups: Vec<_> = fs::read_dir(parent)
+        .unwrap()
+        .filter_map(|e| {
+            let e = e.ok()?;
+            e.file_name()
+                .to_string_lossy()
+                .contains("freekee-bak")
+                .then(|| e.path())
+        })
+        .collect();
+    assert!(
+        backups.is_empty(),
+        "no backup file should exist when validation fails; got {backups:?}"
+    );
+}
+
+#[test]
+fn apply_fix_batch_rejects_duplicate_db_level_intents() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("dups.kdbx");
+    let mut vault = Vault::create(
+        &dest,
+        Zeroizing::new("pw".to_owned()),
+        None,
+        tiny_template(),
+        false,
+    )
+    .unwrap();
+    let mtime_before = fs::metadata(&dest).unwrap().modified().unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+
+    // Two SetOuterCipher intents with different targets — clearly a
+    // programming error in the caller; must reject before any mutation.
+    let intents = vec![
+        FixIntent::SetOuterCipher(OuterCipher::ChaCha20),
+        FixIntent::SetOuterCipher(OuterCipher::Aes256),
+    ];
+    let err = vault
+        .apply_fix_batch(intents, RotateOpts { backup: true })
+        .expect_err("duplicate db-level intent must be rejected");
+    assert!(
+        matches!(err, freekee_core::Error::InvalidFixBatch(_)),
+        "unexpected error: {err:?}"
+    );
+
+    let mtime_after = fs::metadata(&dest).unwrap().modified().unwrap();
+    assert_eq!(
+        mtime_before, mtime_after,
+        "rejection must precede any file write"
+    );
+}
+
+#[test]
+fn apply_fix_batch_rejects_duplicate_entry_intents_same_kind() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("dup-entry.kdbx");
+    let mut vault = Vault::create(
+        &dest,
+        Zeroizing::new("pw".to_owned()),
+        None,
+        tiny_template(),
+        false,
+    )
+    .unwrap();
+    vault
+        .upsert_entry(
+            EntryPath {
+                groups: &[],
+                title: "Token",
+            },
+            EntryDraft::default(),
+        )
+        .unwrap();
+    vault.save().unwrap();
+
+    let intents = vec![
+        FixIntent::RegenerateEntryPassword {
+            path: vec!["Token".to_string()],
+            policy: PasswordPolicy::default(),
+        },
+        FixIntent::RegenerateEntryPassword {
+            path: vec!["Token".to_string()],
+            policy: PasswordPolicy::default(),
+        },
+    ];
+    let err = vault
+        .apply_fix_batch(intents, RotateOpts { backup: false })
+        .expect_err("two same-kind intents on the same entry must be rejected");
+    assert!(
+        matches!(err, freekee_core::Error::InvalidFixBatch(_)),
+        "unexpected error: {err:?}"
+    );
+}
+
+#[test]
+fn apply_fix_batch_allows_mixed_kinds_on_same_entry() {
+    // An entry can legitimately be both weak (rotate password) AND
+    // expired (extend expiry); allowing both intents on one path is
+    // load-bearing for the CLI loop.
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("mixed-kinds.kdbx");
+    let mut vault = Vault::create(
+        &dest,
+        Zeroizing::new("pw".to_owned()),
+        None,
+        tiny_template(),
+        false,
+    )
+    .unwrap();
+    let path = EntryPath {
+        groups: &[],
+        title: "Token",
+    };
+    vault
+        .upsert_entry(
+            path,
+            EntryDraft {
+                password: Some("weak"),
+                ..EntryDraft::default()
+            },
+        )
+        .unwrap();
+    vault.save().unwrap();
+
+    let future = chrono::NaiveDate::from_ymd_opt(2027, 6, 1)
+        .unwrap()
+        .and_hms_opt(0, 0, 0)
+        .unwrap();
+    let intents = vec![
+        FixIntent::RegenerateEntryPassword {
+            path: vec!["Token".to_string()],
+            policy: PasswordPolicy::default(),
+        },
+        FixIntent::ExtendEntryExpiry {
+            path: vec!["Token".to_string()],
+            until: future,
+        },
+    ];
+    vault
+        .apply_fix_batch(intents, RotateOpts { backup: false })
+        .expect("different kinds on the same entry must succeed");
 }
 
 #[test]

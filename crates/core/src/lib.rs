@@ -5,12 +5,14 @@
 pub mod backup;
 mod config;
 mod error;
+pub mod fix;
 pub mod password;
 mod vault;
 
 pub use backup::BackupOutcome;
 pub use config::Config;
 pub use error::{Error, Result};
+pub use fix::{FixIntent, FixReport};
 pub use password::{Alphabet, PasswordPolicy};
 pub use vault::{BulkRotateFilter, EntryView, HistoryView, ListFilter, RotateOpts, Vault};
 

@@ -12,6 +12,7 @@ use kdbx::{EntryDraft, EntryField, EntryFieldValue, EntryPath};
 
 use crate::backup::{BackupGuard, BackupOutcome};
 use crate::error::{Error, Result};
+use crate::fix::{FixIntent, FixReport};
 use crate::password::PasswordPolicy;
 
 /// Read-only view of an entry's printable fields, returned by
@@ -477,6 +478,105 @@ impl Vault {
         Ok((outcome, rotated_paths))
     }
 
+    /// Apply a collected batch of [`FixIntent`]s in-memory, then run
+    /// ONE `save_and_verify_with_backup` at the tail.
+    ///
+    /// Mirrors [`Vault::rotate_entries`]: a single Argon2 verify pays
+    /// for any number of intents, and the file gets at most one backup
+    /// file regardless of batch size. Empty batches short-circuit
+    /// without writing anything (no save, no backup).
+    ///
+    /// Pre-validation runs before any mutation so a half-applied batch
+    /// can never end up on disk.
+    pub fn apply_fix_batch(
+        &mut self,
+        intents: Vec<FixIntent>,
+        opts: RotateOpts,
+    ) -> Result<FixReport> {
+        if intents.is_empty() {
+            return Ok(FixReport::default());
+        }
+
+        // Pre-validate before any mutation so a half-applied batch can
+        // never end up on disk.
+        validate_no_duplicate_db_level(&intents)?;
+        validate_no_duplicate_entry_intents(&intents)?;
+        for intent in &intents {
+            if let Some(segments) = entry_path_segments(intent) {
+                let mut scratch: Vec<&str> = Vec::new();
+                let path = build_entry_path_borrow(segments, &mut scratch);
+                if !self.entry_exists(path) {
+                    return Err(Error::NotFound);
+                }
+            }
+        }
+
+        let mut applied = Vec::with_capacity(intents.len());
+        for intent in intents {
+            applied.push(self.apply_one_fix(intent)?);
+        }
+
+        let pw = self.password.clone();
+        let outcome = self.save_and_verify_with_backup(opts.backup, &pw)?;
+        Ok(FixReport { applied, outcome })
+    }
+
+    /// Apply a single fix intent in-memory. The save+verify tail runs
+    /// once in [`Vault::apply_fix_batch`] after every intent in a batch
+    /// has been applied.
+    fn apply_one_fix(&mut self, intent: FixIntent) -> Result<String> {
+        match intent {
+            FixIntent::RegenerateEntryPassword { path, policy } => {
+                let mut scratch: Vec<&str> = Vec::new();
+                let ep = build_entry_path_borrow(&path, &mut scratch);
+                let new_pw = policy.generate();
+                self.db.set_entry_field(
+                    ep,
+                    EntryField::Password,
+                    EntryFieldValue::Protected(new_pw.as_str()),
+                )?;
+                Ok(format!("regenerated password: {}", path.join("/")))
+            }
+            FixIntent::ExtendEntryExpiry { path, until } => {
+                let mut scratch: Vec<&str> = Vec::new();
+                let ep = build_entry_path_borrow(&path, &mut scratch);
+                self.db.set_entry_expiry(ep, Some(until))?;
+                Ok(format!(
+                    "extended expiry to {}: {}",
+                    until.format("%Y-%m-%d"),
+                    path.join("/")
+                ))
+            }
+            FixIntent::SetOuterCipher(c) => {
+                self.db.set_outer_cipher(c);
+                Ok(format!("set outer cipher: {c:?}"))
+            }
+            FixIntent::SetInnerCipher(c) => {
+                self.db.set_inner_cipher(c);
+                Ok(format!("set inner cipher: {c:?}"))
+            }
+            FixIntent::SetKdfArgon2id => {
+                self.db.set_kdf_params(crate::DEFAULT_TEMPLATE.kdf)?;
+                Ok("set KDF to Argon2id (workspace defaults)".to_string())
+            }
+            FixIntent::SetArgon2idParams(params) => {
+                self.db.set_kdf_params(params)?;
+                Ok(format!(
+                    "set Argon2id params: memory={} bytes, iterations={}, parallelism={}",
+                    params.memory, params.iterations, params.parallelism
+                ))
+            }
+            FixIntent::UpgradeFormat => {
+                let changed = self.db.ensure_writable();
+                if changed {
+                    Ok("upgraded KDBX format to current write target".to_string())
+                } else {
+                    Ok("KDBX format already at current write target (no-op)".to_string())
+                }
+            }
+        }
+    }
+
     /// Sorted `<group>/<title>` paths for every entry the matching
     /// `BulkRotateFilter` would rotate. Read-only; used by the CLI's
     /// `--dry-run` to preview `rotate_entries`. The implementation is
@@ -601,4 +701,92 @@ impl Vault {
             backup_path,
         })
     }
+}
+
+/// Borrow `segments` as an [`EntryPath`]. `scratch` is reused per call
+/// to avoid an allocation. Caller owns both buffers.
+fn build_entry_path_borrow<'a>(
+    segments: &'a [String],
+    scratch: &'a mut Vec<&'a str>,
+) -> EntryPath<'a> {
+    let (title, groups) = segments
+        .split_last()
+        .expect("FixIntent paths are non-empty");
+    scratch.clear();
+    scratch.extend(groups.iter().map(String::as_str));
+    EntryPath {
+        groups: scratch.as_slice(),
+        title: title.as_str(),
+    }
+}
+
+/// Return the entry-path segments for intents that target a single
+/// entry, or `None` for db-level intents.
+fn entry_path_segments(intent: &FixIntent) -> Option<&[String]> {
+    match intent {
+        FixIntent::RegenerateEntryPassword { path, .. }
+        | FixIntent::ExtendEntryExpiry { path, .. } => Some(path),
+        FixIntent::SetOuterCipher(_)
+        | FixIntent::SetInnerCipher(_)
+        | FixIntent::SetKdfArgon2id
+        | FixIntent::SetArgon2idParams(_)
+        | FixIntent::UpgradeFormat => None,
+    }
+}
+
+/// Tag the db-level variants so we can reject "two of the same kind"
+/// before any mutation runs. Each db-level fix is singleton — two
+/// cipher changes in one batch is a programming error in the caller.
+fn db_level_kind(intent: &FixIntent) -> Option<&'static str> {
+    match intent {
+        FixIntent::SetOuterCipher(_) => Some("SetOuterCipher"),
+        FixIntent::SetInnerCipher(_) => Some("SetInnerCipher"),
+        FixIntent::SetKdfArgon2id => Some("SetKdfArgon2id"),
+        FixIntent::SetArgon2idParams(_) => Some("SetArgon2idParams"),
+        FixIntent::UpgradeFormat => Some("UpgradeFormat"),
+        FixIntent::RegenerateEntryPassword { .. } | FixIntent::ExtendEntryExpiry { .. } => None,
+    }
+}
+
+fn validate_no_duplicate_db_level(intents: &[FixIntent]) -> Result<()> {
+    let mut seen: Vec<&'static str> = Vec::new();
+    for intent in intents {
+        if let Some(kind) = db_level_kind(intent) {
+            if seen.contains(&kind) {
+                return Err(Error::InvalidFixBatch(
+                    "duplicate db-level fix intent: each is singleton per batch",
+                ));
+            }
+            seen.push(kind);
+        }
+    }
+    Ok(())
+}
+
+/// Tag entry-level intents by `(path, kind)` so the validator can
+/// reject two identical-kind intents on the same entry. Different
+/// kinds on the same path are allowed (e.g., rotate + extend expiry).
+fn entry_intent_kind(intent: &FixIntent) -> Option<(&[String], &'static str)> {
+    match intent {
+        FixIntent::RegenerateEntryPassword { path, .. } => {
+            Some((path.as_slice(), "RegenerateEntryPassword"))
+        }
+        FixIntent::ExtendEntryExpiry { path, .. } => Some((path.as_slice(), "ExtendEntryExpiry")),
+        _ => None,
+    }
+}
+
+fn validate_no_duplicate_entry_intents(intents: &[FixIntent]) -> Result<()> {
+    let mut seen: Vec<(&[String], &'static str)> = Vec::new();
+    for intent in intents {
+        if let Some((path, kind)) = entry_intent_kind(intent) {
+            if seen.iter().any(|(p, k)| *p == path && *k == kind) {
+                return Err(Error::InvalidFixBatch(
+                    "duplicate entry-level fix intent: same path and kind appears twice",
+                ));
+            }
+            seen.push((path, kind));
+        }
+    }
+    Ok(())
 }

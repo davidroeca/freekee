@@ -171,8 +171,10 @@ freekee mv --db <path> <entry> <new-path>
 
 # Audit (the differentiator)
 freekee audit --db <path> [--strict] [--hibp] [--json]
-freekee audit --db <path> --fix-interactive  # walk through findings, prompt to fix
-freekee audit-watch --db <path>              # re-audit on file change
+freekee fix --db <path> [--length N] [--alphabet ...] [--extend-expiry-days N]
+                                             # interactive audit-driven remediation:
+                                             # walks findings, prompts y/N/q, applies
+                                             # accepted fixes in one save
 
 # Rotation
 freekee rotate passphrase --db <path>

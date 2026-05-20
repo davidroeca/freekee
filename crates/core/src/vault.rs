@@ -166,6 +166,24 @@ impl Vault {
         Ok(())
     }
 
+    /// Extend (or set) the entry's expiry to `until`. In-memory only;
+    /// the caller is responsible for persistence via `save`, a rotation
+    /// method, or `apply_fix_batch`. Routes through
+    /// [`kdbx::Database::set_entry_expiry`], which snapshots the prior
+    /// version into history and stamps `times.last_modification`.
+    ///
+    /// Intended primarily for use inside `apply_fix_batch` so the
+    /// expiry-extension fix and other intents can share a single
+    /// save+verify+backup tail.
+    pub fn extend_entry_expiry(
+        &mut self,
+        path: EntryPath<'_>,
+        until: chrono::NaiveDateTime,
+    ) -> Result<()> {
+        self.db.set_entry_expiry(path, Some(until))?;
+        Ok(())
+    }
+
     /// Insert an entry at `path` if missing, or update the supplied
     /// fields on the existing entry. Field updates route through
     /// `set_field` so each one snapshots into history.

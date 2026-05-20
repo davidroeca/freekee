@@ -1512,3 +1512,62 @@ fn rotate_entries_history_delta_is_plus_one_per_match() {
         "bulk rotate must add exactly one history version on top of pre-existing history",
     );
 }
+
+#[test]
+fn vault_extend_entry_expiry_updates_in_memory_without_save() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("expiry.kdbx");
+
+    let mut vault = Vault::create(
+        &dest,
+        Zeroizing::new("pw".to_owned()),
+        None,
+        tiny_template(),
+        false,
+    )
+    .unwrap();
+    let entry_path = EntryPath {
+        groups: &[],
+        title: "Token",
+    };
+    vault
+        .upsert_entry(
+            entry_path,
+            EntryDraft {
+                password: Some("hunter2"),
+                ..EntryDraft::default()
+            },
+        )
+        .unwrap();
+    vault.save().unwrap();
+    let mtime_before = fs::metadata(&dest).unwrap().modified().unwrap();
+
+    // Allow a 1-second filesystem mtime grace before the no-save assert.
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+
+    let target = chrono::NaiveDate::from_ymd_opt(2027, 6, 1)
+        .unwrap()
+        .and_hms_opt(0, 0, 0)
+        .unwrap();
+    vault.extend_entry_expiry(entry_path, target).unwrap();
+
+    // Critical: extend_entry_expiry must NOT save. The file on disk is
+    // still the pre-mutation state.
+    let mtime_after = fs::metadata(&dest).unwrap().modified().unwrap();
+    assert_eq!(
+        mtime_before, mtime_after,
+        "extend_entry_expiry must not touch the file on disk"
+    );
+
+    // Now the caller's responsibility to persist. After explicit save,
+    // the new expiry survives a reopen.
+    vault.save().unwrap();
+    drop(vault);
+    let reopened = kdbx::Database::open(&dest, "pw", None).unwrap();
+    let entry = reopened.entry_by_path(entry_path).unwrap();
+    assert_eq!(
+        entry.expires_at(),
+        Some(target),
+        "explicit save after extend_entry_expiry must persist the new expiry"
+    );
+}

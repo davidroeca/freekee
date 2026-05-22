@@ -65,7 +65,7 @@ Caveat for the threat model: this assumes Grover-on-symmetric is the dominant qu
 
 - The user's passphrase has at least 60 bits of entropy (audit warns if zxcvbn-style estimator says otherwise).
 - The host OS provides a working CSPRNG via `getrandom`.
-- Argon2id parameters are auto-tuned per-platform on `init` and stored in the file.
+- Argon2id parameters are auto-tuned per-platform when the operator opts in via `freekee init --tune` (and `freekee rotate kdf-params --tune` for existing files), targeting `--target-ms` derivation time (default 1000). Without `--tune` the workspace defaults apply (64 MiB / 10 iters / 2 parallelism).
 
 ## 5. Architecture
 

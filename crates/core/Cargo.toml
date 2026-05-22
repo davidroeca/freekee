@@ -21,6 +21,12 @@ dirs.workspace = true
 # `keepass`, but listed directly so the dep graph is honest about
 # what core uses.
 getrandom = "0.3"
+# Used by `tune::tune_argon2id` to benchmark candidate KDF params.
+# Already a direct dep of `kdbx` (which constructs the upstream
+# `KdfConfig::Argon2id`); listed here so `core` doesn't have to
+# round-trip the timing through a kdbx accessor. Matches the kdbx
+# pin shape.
+rust-argon2 = "3.0"
 
 [dev-dependencies]
 tempfile.workspace = true

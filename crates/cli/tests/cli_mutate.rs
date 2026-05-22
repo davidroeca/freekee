@@ -1348,3 +1348,164 @@ fn rotate_cipher_with_no_target_errors_out() {
         .assert()
         .failure();
 }
+
+#[test]
+fn init_tune_writes_argon2_params_within_tuned_bounds() {
+    // Tiny target so the test runs fast; the bounds-only assertions
+    // are host-independent.
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("tuned.kdbx");
+
+    freekee()
+        .arg("init")
+        .arg(&dest)
+        .arg("--tune")
+        .arg("--target-ms")
+        .arg("50")
+        .arg("--pass-stdin")
+        .write_stdin("tune-pw\n")
+        .assert()
+        .success();
+
+    let db = kdbx::Database::open(&dest, "tune-pw", None).expect("tuned file reopens");
+    match db.kdf() {
+        kdbx::Kdf::Argon2id {
+            iterations,
+            memory,
+            parallelism,
+        } => {
+            // Memory is held at 64 MiB by the tuner regardless of host.
+            assert_eq!(memory, 64 * 1024 * 1024);
+            // Iterations live in [MIN_ITERS=2, MAX_ITERS=200].
+            assert!(
+                (2..=200).contains(&iterations),
+                "iters {iterations} out of [2,200]"
+            );
+            // Parallelism is min(host CPUs, 4), clamped low at 1.
+            assert!(
+                (1..=4).contains(&parallelism),
+                "parallelism {parallelism} out of [1,4]"
+            );
+        }
+        other => panic!("expected Argon2id, got {other:?}"),
+    }
+}
+
+#[test]
+fn init_tune_conflicts_with_explicit_argon2_flags() {
+    // Each of --memory, --iterations, --parallelism is mutually
+    // exclusive with --tune (the tuner owns all three).
+    for flag in ["--memory", "--iterations", "--parallelism"] {
+        let tmp = tempfile::tempdir().unwrap();
+        let dest = tmp.path().join("clash.kdbx");
+        freekee()
+            .arg("init")
+            .arg(&dest)
+            .arg("--tune")
+            .arg(flag)
+            .arg("1")
+            .arg("--pass-stdin")
+            .write_stdin("pw\n")
+            .assert()
+            .failure()
+            .stderr(contains("cannot be used with"));
+    }
+}
+
+#[test]
+fn init_target_ms_requires_tune() {
+    // --target-ms with no --tune is meaningless; clap should reject.
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("no-tune.kdbx");
+
+    freekee()
+        .arg("init")
+        .arg(&dest)
+        .arg("--target-ms")
+        .arg("100")
+        .arg("--pass-stdin")
+        .write_stdin("pw\n")
+        .assert()
+        .failure()
+        .stderr(contains("--tune"));
+}
+
+#[test]
+fn rotate_kdf_params_tune_replaces_argon2_settings() {
+    // seed_vault uses iterations=1, memory=8 KiB, parallelism=1. The
+    // tuner always sets memory=64 MiB and iters in [2, 200], so the
+    // post-rotate values must differ on every dimension.
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    seed_vault(&dest, "kdf-tune-pw");
+
+    freekee()
+        .arg("rotate")
+        .arg("kdf-params")
+        .arg("--db")
+        .arg(&dest)
+        .arg("--tune")
+        .arg("--target-ms")
+        .arg("50")
+        .arg("--pass-stdin")
+        .write_stdin("kdf-tune-pw\n")
+        .assert()
+        .success();
+
+    let db = kdbx::Database::open(&dest, "kdf-tune-pw", None).unwrap();
+    match db.kdf() {
+        kdbx::Kdf::Argon2id {
+            iterations,
+            memory,
+            parallelism,
+        } => {
+            assert_eq!(memory, 64 * 1024 * 1024);
+            assert!((2..=200).contains(&iterations));
+            assert!((1..=4).contains(&parallelism));
+        }
+        other => panic!("expected Argon2id, got {other:?}"),
+    }
+}
+
+#[test]
+fn rotate_kdf_params_tune_conflicts_with_explicit_argon2_flags() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    seed_vault(&dest, "pw");
+
+    for flag in ["--memory", "--iterations", "--parallelism"] {
+        freekee()
+            .arg("rotate")
+            .arg("kdf-params")
+            .arg("--db")
+            .arg(&dest)
+            .arg("--tune")
+            .arg(flag)
+            .arg("1")
+            .arg("--pass-stdin")
+            .write_stdin("pw\n")
+            .assert()
+            .failure()
+            .stderr(contains("cannot be used with"));
+    }
+}
+
+#[test]
+fn rotate_kdf_params_target_ms_requires_tune() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    seed_vault(&dest, "pw");
+
+    freekee()
+        .arg("rotate")
+        .arg("kdf-params")
+        .arg("--db")
+        .arg(&dest)
+        .arg("--target-ms")
+        .arg("100")
+        .arg("--pass-stdin")
+        .write_stdin("pw\n")
+        .assert()
+        .failure()
+        .stderr(contains("--tune"));
+}

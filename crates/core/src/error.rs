@@ -29,6 +29,12 @@ pub enum Error {
     )]
     RotationVerificationFailed,
 
+    #[error(
+        "vault was modified on disk since open; \
+         re-open the file or pass --force to overwrite"
+    )]
+    ConflictDetected,
+
     #[error("at least one rotation target must be specified")]
     NoRotationTarget,
 

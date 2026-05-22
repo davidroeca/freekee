@@ -41,6 +41,9 @@ pub struct Args {
     /// Skip the timestamped backup. The post-save verify always runs.
     #[arg(long)]
     pub no_backup: bool,
+    /// Overwrite the file even if it changed on disk since open.
+    #[arg(long)]
+    pub force: bool,
 }
 
 pub fn run(args: Args) -> anyhow::Result<ExitCode> {
@@ -115,6 +118,7 @@ pub fn run(args: Args) -> anyhow::Result<ExitCode> {
         intents,
         RotateOpts {
             backup: !args.no_backup,
+            force: args.force,
         },
     )?;
     for line in &report.applied {

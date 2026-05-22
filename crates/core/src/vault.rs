@@ -41,11 +41,20 @@ pub struct RotateOpts {
     /// before writing the rotated file. The post-save verify always
     /// runs regardless of this flag.
     pub backup: bool,
+    /// When `true`, skip the pre-save conflict check that compares the
+    /// file's on-disk fingerprint to the one cached at open. Use only
+    /// when the caller has explicitly opted in (e.g. CLI `--force`)
+    /// and accepts that any external edits made between open and save
+    /// will be silently overwritten.
+    pub force: bool,
 }
 
 impl Default for RotateOpts {
     fn default() -> Self {
-        Self { backup: true }
+        Self {
+            backup: true,
+            force: false,
+        }
     }
 }
 
@@ -82,6 +91,13 @@ pub struct Vault {
     path: PathBuf,
     password: Zeroizing<String>,
     keyfile: Option<PathBuf>,
+    /// SHA-256 of the file's unencrypted prefix at the moment we last
+    /// read or wrote it. Captured by `Vault::open` and refreshed at the
+    /// tail of every successful save. Compared against the on-disk
+    /// fingerprint just before a save to detect concurrent edits by
+    /// another process (e.g. a Dropbox sync that delivered changes
+    /// from another machine between our open and our save).
+    disk_fingerprint: Option<[u8; 32]>,
 }
 
 impl std::fmt::Debug for Vault {
@@ -101,11 +117,13 @@ impl Vault {
     /// `Zeroizing<String>` for the lifetime of the `Vault`.
     pub fn open(path: &Path, password: Zeroizing<String>, keyfile: Option<&Path>) -> Result<Self> {
         let db = kdbx::Database::open(path, password.as_str(), keyfile)?;
+        let disk_fingerprint = Some(kdbx::Database::read_header_fingerprint(path)?);
         Ok(Self {
             db,
             path: path.to_path_buf(),
             password,
             keyfile: keyfile.map(Path::to_path_buf),
+            disk_fingerprint,
         })
     }
 
@@ -128,20 +146,65 @@ impl Vault {
         }
         let db = kdbx::Database::new_empty(template);
         db.save(path, password.as_str(), keyfile)?;
+        let disk_fingerprint = Some(kdbx::Database::read_header_fingerprint(path)?);
         Ok(Self {
             db,
             path: path.to_path_buf(),
             password,
             keyfile: keyfile.map(Path::to_path_buf),
+            disk_fingerprint,
         })
+    }
+
+    /// SHA-256 of the file's unencrypted prefix as of the last open or
+    /// save. `None` only when the underlying field has not been
+    /// populated yet (no public path produces that today; reserved for
+    /// future constructors that don't touch the disk). Pre-save
+    /// conflict detection compares this against a fresh read of the
+    /// on-disk file.
+    pub fn disk_fingerprint(&self) -> Option<[u8; 32]> {
+        self.disk_fingerprint
     }
 
     /// Write the in-memory database back to its original path with
     /// the held credentials. No backup; rotation paths use
     /// `save_with_backup` (Phase 2.4).
+    ///
+    /// Refuses with [`Error::ConflictDetected`] when the file on disk
+    /// has changed since this `Vault` opened or last saved it. Callers
+    /// that explicitly want to overwrite use [`Vault::save_force`].
     pub fn save(&mut self) -> Result<()> {
+        self.check_no_conflict()?;
+        self.save_unchecked()
+    }
+
+    /// Like [`Vault::save`] but skips the on-disk conflict check.
+    /// Any concurrent edits to the file between this `Vault`'s open
+    /// and this call are silently overwritten. Intended for CLI
+    /// `--force` and the equivalent UI control.
+    pub fn save_force(&mut self) -> Result<()> {
+        self.save_unchecked()
+    }
+
+    fn save_unchecked(&mut self) -> Result<()> {
         self.db
             .save(&self.path, self.password.as_str(), self.keyfile.as_deref())?;
+        self.disk_fingerprint = Some(kdbx::Database::read_header_fingerprint(&self.path)?);
+        Ok(())
+    }
+
+    /// Compare the file's on-disk fingerprint to the one we cached at
+    /// open / last save. Returns `Error::ConflictDetected` on mismatch.
+    /// A `None` cached fingerprint (no public path produces that today)
+    /// is treated as "no baseline" and skips the check.
+    fn check_no_conflict(&self) -> Result<()> {
+        let Some(cached) = self.disk_fingerprint else {
+            return Ok(());
+        };
+        let on_disk = kdbx::Database::read_header_fingerprint(&self.path)?;
+        if cached != on_disk {
+            return Err(Error::ConflictDetected);
+        }
         Ok(())
     }
 
@@ -354,7 +417,7 @@ impl Vault {
             self.db.set_inner_cipher(c);
         }
         let pw = self.password.clone();
-        self.save_and_verify_with_backup(opts.backup, &pw)
+        self.save_and_verify_with_backup(opts, &pw)
     }
 
     /// Bring the database's in-memory format version up to whatever
@@ -371,7 +434,7 @@ impl Vault {
             });
         }
         let pw = self.password.clone();
-        self.save_and_verify_with_backup(opts.backup, &pw)
+        self.save_and_verify_with_backup(opts, &pw)
     }
 
     /// Rotate the KDF type to Argon2id. If the database already uses
@@ -389,7 +452,7 @@ impl Vault {
         }
         self.db.set_kdf_params(crate::DEFAULT_TEMPLATE.kdf)?;
         let pw = self.password.clone();
-        self.save_and_verify_with_backup(opts.backup, &pw)
+        self.save_and_verify_with_backup(opts, &pw)
     }
 
     /// Generate a fresh password for the entry at `path` using
@@ -414,7 +477,7 @@ impl Vault {
             EntryFieldValue::Protected(new_pw.as_str()),
         )?;
         let pw = self.password.clone();
-        self.save_and_verify_with_backup(opts.backup, &pw)
+        self.save_and_verify_with_backup(opts, &pw)
     }
 
     /// Bulk-regenerate passwords for every entry that matches at least
@@ -474,7 +537,7 @@ impl Vault {
         }
 
         let pw = self.password.clone();
-        let outcome = self.save_and_verify_with_backup(opts.backup, &pw)?;
+        let outcome = self.save_and_verify_with_backup(opts, &pw)?;
         Ok((outcome, rotated_paths))
     }
 
@@ -517,7 +580,7 @@ impl Vault {
         }
 
         let pw = self.password.clone();
-        let outcome = self.save_and_verify_with_backup(opts.backup, &pw)?;
+        let outcome = self.save_and_verify_with_backup(opts, &pw)?;
         Ok(FixReport { applied, outcome })
     }
 
@@ -620,7 +683,7 @@ impl Vault {
     ) -> Result<BackupOutcome> {
         self.db.set_kdf_params(params)?;
         let pw = self.password.clone();
-        self.save_and_verify_with_backup(opts.backup, &pw)
+        self.save_and_verify_with_backup(opts, &pw)
     }
 
     /// Add, replace, or remove the keyfile composite for this database.
@@ -640,7 +703,7 @@ impl Vault {
         let prev = self.keyfile.clone();
         self.keyfile = new_keyfile.map(Path::to_path_buf);
         let pw = self.password.clone();
-        match self.save_and_verify_with_backup(opts.backup, &pw) {
+        match self.save_and_verify_with_backup(opts, &pw) {
             Ok(outcome) => Ok(outcome),
             Err(e) => {
                 self.keyfile = prev;
@@ -662,7 +725,7 @@ impl Vault {
         if new.is_empty() {
             return Err(Error::EmptyPassphrase);
         }
-        let outcome = self.save_and_verify_with_backup(opts.backup, new.as_str())?;
+        let outcome = self.save_and_verify_with_backup(opts, new.as_str())?;
         // Only update the held passphrase after the new file has
         // verified - on rollback, `self.password` still matches the
         // restored on-disk state.
@@ -673,12 +736,21 @@ impl Vault {
     /// Shared rotation tail: take a backup, save with `password` plus
     /// the vault's currently-held keyfile, reopen to confirm the file
     /// decrypts under the same composite, roll back on failure.
+    ///
+    /// Refuses with [`Error::ConflictDetected`] when the file on disk
+    /// has changed since this `Vault` opened or last saved it, unless
+    /// `opts.force` is set. The check runs **before** the backup is
+    /// taken, so a refused save leaves no orphan `.freekee-bak-*` file
+    /// on disk.
     fn save_and_verify_with_backup(
         &mut self,
-        backup: bool,
+        opts: RotateOpts,
         password: &str,
     ) -> Result<BackupOutcome> {
-        let mut guard = if backup {
+        if !opts.force {
+            self.check_no_conflict()?;
+        }
+        let mut guard = if opts.backup {
             BackupGuard::create_for(&self.path, Utc::now())?
         } else {
             BackupGuard::skip()
@@ -694,6 +766,10 @@ impl Vault {
             let _ = guard.restore(&self.path);
             return Err(Error::RotationVerificationFailed);
         }
+        // Refresh the cached fingerprint to the file we just wrote.
+        // Verify is the latest point we know the file on disk is good;
+        // doing this after rollback would refresh to a stale image.
+        self.disk_fingerprint = Some(kdbx::Database::read_header_fingerprint(&self.path)?);
         let backup_path = guard.path().map(Path::to_path_buf);
         guard.commit();
         Ok(BackupOutcome {

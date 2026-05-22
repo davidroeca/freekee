@@ -1509,3 +1509,83 @@ fn rotate_kdf_params_target_ms_requires_tune() {
         .failure()
         .stderr(contains("--tune"));
 }
+
+// ---------------------------------------------------------------------------
+// `--force` is present on every mutation/rotation subcommand.
+//
+// Behavioral coverage of conflict detection + force-override lives in the
+// core tests (`crates/core/tests/vault.rs`). The CLI is the plumbing —
+// these smoke checks just confirm the flag reaches each subcommand's
+// argparse so a future refactor can't silently drop it on one path.
+// ---------------------------------------------------------------------------
+
+fn assert_force_in_help(args: &[&str]) {
+    let mut cmd = freekee();
+    for a in args {
+        cmd.arg(a);
+    }
+    cmd.arg("--help")
+        .assert()
+        .success()
+        .stdout(contains("--force"));
+}
+
+#[test]
+fn force_flag_in_help_set() {
+    assert_force_in_help(&["set"]);
+}
+
+#[test]
+fn force_flag_in_help_rm() {
+    assert_force_in_help(&["rm"]);
+}
+
+#[test]
+fn force_flag_in_help_mv() {
+    assert_force_in_help(&["mv"]);
+}
+
+#[test]
+fn force_flag_in_help_fix() {
+    assert_force_in_help(&["fix"]);
+}
+
+#[test]
+fn force_flag_in_help_rotate_passphrase() {
+    assert_force_in_help(&["rotate", "passphrase"]);
+}
+
+#[test]
+fn force_flag_in_help_rotate_kdf_params() {
+    assert_force_in_help(&["rotate", "kdf-params"]);
+}
+
+#[test]
+fn force_flag_in_help_rotate_kdf() {
+    assert_force_in_help(&["rotate", "kdf"]);
+}
+
+#[test]
+fn force_flag_in_help_rotate_cipher() {
+    assert_force_in_help(&["rotate", "cipher"]);
+}
+
+#[test]
+fn force_flag_in_help_rotate_format() {
+    assert_force_in_help(&["rotate", "format"]);
+}
+
+#[test]
+fn force_flag_in_help_rotate_keyfile() {
+    assert_force_in_help(&["rotate", "keyfile"]);
+}
+
+#[test]
+fn force_flag_in_help_rotate_entry() {
+    assert_force_in_help(&["rotate", "entry"]);
+}
+
+#[test]
+fn force_flag_in_help_rotate_entries() {
+    assert_force_in_help(&["rotate", "entries"]);
+}

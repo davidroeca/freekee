@@ -324,7 +324,10 @@ fn rotate_passphrase_writes_backup_and_old_password_no_longer_works() {
     let outcome = vault
         .rotate_passphrase(
             Zeroizing::new("new-pass".to_owned()),
-            RotateOpts { backup: true },
+            RotateOpts {
+                backup: true,
+                force: false,
+            },
         )
         .unwrap();
     drop(vault);
@@ -359,7 +362,10 @@ fn rotate_passphrase_with_no_backup_does_not_write_backup() {
     let outcome = vault
         .rotate_passphrase(
             Zeroizing::new("new-pass".to_owned()),
-            RotateOpts { backup: false },
+            RotateOpts {
+                backup: false,
+                force: false,
+            },
         )
         .unwrap();
 
@@ -398,7 +404,13 @@ fn rotate_kdf_params_changes_persistent_params_passphrase_unchanged() {
         parallelism: 2,
     };
     let outcome = vault
-        .rotate_kdf_params(new_params, RotateOpts { backup: true })
+        .rotate_kdf_params(
+            new_params,
+            RotateOpts {
+                backup: true,
+                force: false,
+            },
+        )
         .expect("rotate kdf params");
     assert!(outcome.backup_path.is_some());
     drop(vault);
@@ -454,7 +466,14 @@ fn rotate_entry_appends_history_and_changes_password() {
         alphabet: Alphabet::AlphaNum,
     };
     let outcome = vault
-        .rotate_entry(entry_path, &policy, RotateOpts { backup: true })
+        .rotate_entry(
+            entry_path,
+            &policy,
+            RotateOpts {
+                backup: true,
+                force: false,
+            },
+        )
         .expect("rotate entry");
     assert!(outcome.backup_path.is_some(), "backup must be created");
     drop(vault);
@@ -995,7 +1014,13 @@ fn rotate_keyfile_add_makes_keyfile_required() {
     let mut vault = Vault::open(&dest, Zeroizing::new("pw".to_owned()), None).unwrap();
 
     vault
-        .rotate_keyfile(Some(&kf_path), RotateOpts { backup: true })
+        .rotate_keyfile(
+            Some(&kf_path),
+            RotateOpts {
+                backup: true,
+                force: false,
+            },
+        )
         .expect("rotate keyfile add");
     drop(vault);
 
@@ -1102,7 +1127,13 @@ fn rotate_keyfile_with_no_change_still_saves_and_returns_outcome() {
     // change, but a save+verify still runs (and can take a backup) so
     // the call is observable.
     let outcome = vault
-        .rotate_keyfile(None, RotateOpts { backup: true })
+        .rotate_keyfile(
+            None,
+            RotateOpts {
+                backup: true,
+                force: false,
+            },
+        )
         .expect("noop rotate keyfile");
     assert!(
         outcome.backup_path.is_some(),
@@ -1148,7 +1179,12 @@ fn rotate_kdf_noop_when_already_argon2id() {
     .unwrap();
 
     let mut vault = Vault::open(&dest, Zeroizing::new("pw".to_owned()), None).unwrap();
-    let outcome = vault.rotate_kdf(RotateOpts { backup: true }).unwrap();
+    let outcome = vault
+        .rotate_kdf(RotateOpts {
+            backup: true,
+            force: false,
+        })
+        .unwrap();
 
     assert!(!outcome.changed, "no-op: already on Argon2id");
     assert!(outcome.backup_path.is_none(), "no-op: no backup written");
@@ -1161,7 +1197,12 @@ fn rotate_kdf_legacy_aeskdf_upgrades_and_reports_changed() {
     let password = fixture_password(fixture);
 
     let mut vault = Vault::open(&dest, Zeroizing::new(password), None).unwrap();
-    let outcome = vault.rotate_kdf(RotateOpts { backup: false }).unwrap();
+    let outcome = vault
+        .rotate_kdf(RotateOpts {
+            backup: false,
+            force: false,
+        })
+        .unwrap();
 
     assert!(outcome.changed, "AES-KDF -> Argon2id is a real rotation");
     assert!(outcome.backup_path.is_none(), "backup disabled");
@@ -1174,7 +1215,12 @@ fn rotate_kdf_legacy_aeskdf_with_backup_reports_changed_and_backup_path() {
     let password = fixture_password(fixture);
 
     let mut vault = Vault::open(&dest, Zeroizing::new(password), None).unwrap();
-    let outcome = vault.rotate_kdf(RotateOpts { backup: true }).unwrap();
+    let outcome = vault
+        .rotate_kdf(RotateOpts {
+            backup: true,
+            force: false,
+        })
+        .unwrap();
 
     assert!(outcome.changed, "AES-KDF -> Argon2id is a real rotation");
     assert!(outcome.backup_path.is_some(), "backup enabled and written");
@@ -1187,7 +1233,12 @@ fn rotate_format_legacy_kdbx3_upgrades_and_reports_changed() {
     let password = fixture_password(fixture);
 
     let mut vault = Vault::open(&dest, Zeroizing::new(password.clone()), None).unwrap();
-    let outcome = vault.rotate_format(RotateOpts { backup: false }).unwrap();
+    let outcome = vault
+        .rotate_format(RotateOpts {
+            backup: false,
+            force: false,
+        })
+        .unwrap();
 
     assert!(outcome.changed, "KDBX3 -> current is a real rotation");
     assert!(outcome.backup_path.is_none(), "backup disabled");
@@ -1205,7 +1256,12 @@ fn rotate_format_with_backup_reports_changed_and_backup_path() {
     let password = fixture_password(fixture);
 
     let mut vault = Vault::open(&dest, Zeroizing::new(password), None).unwrap();
-    let outcome = vault.rotate_format(RotateOpts { backup: true }).unwrap();
+    let outcome = vault
+        .rotate_format(RotateOpts {
+            backup: true,
+            force: false,
+        })
+        .unwrap();
 
     assert!(outcome.changed);
     assert!(outcome.backup_path.is_some(), "backup enabled and written");
@@ -1225,7 +1281,12 @@ fn rotate_format_noop_when_already_current_target() {
     .unwrap();
 
     let mut vault = Vault::open(&dest, Zeroizing::new("pw".to_owned()), None).unwrap();
-    let outcome = vault.rotate_format(RotateOpts { backup: true }).unwrap();
+    let outcome = vault
+        .rotate_format(RotateOpts {
+            backup: true,
+            force: false,
+        })
+        .unwrap();
 
     assert!(!outcome.changed, "no-op: already at current write target");
     assert!(outcome.backup_path.is_none(), "no-op: no backup written");
@@ -1244,7 +1305,12 @@ fn rotate_format_preserves_entries_across_kdbx3_to_kdbx4() {
     assert!(!before.is_empty(), "fixture must have at least one entry");
 
     let mut vault = Vault::open(&dest, Zeroizing::new(password.clone()), None).unwrap();
-    vault.rotate_format(RotateOpts { backup: false }).unwrap();
+    vault
+        .rotate_format(RotateOpts {
+            backup: false,
+            force: false,
+        })
+        .unwrap();
     drop(vault);
 
     let after = Vault::open(&dest, Zeroizing::new(password), None)
@@ -1302,7 +1368,10 @@ fn rotate_entries_weak_only_rotates_only_weak_entries() {
                 reused: false,
             },
             &policy,
-            RotateOpts { backup: true },
+            RotateOpts {
+                backup: true,
+                force: false,
+            },
         )
         .expect("rotate_entries");
 
@@ -1363,7 +1432,10 @@ fn rotate_entries_combined_filters_dedup_same_entry_matched_by_two_predicates() 
                 reused: true,
             },
             &policy,
-            RotateOpts { backup: false },
+            RotateOpts {
+                backup: false,
+                force: false,
+            },
         )
         .expect("rotate_entries");
     rotated.sort();
@@ -1399,7 +1471,10 @@ fn rotate_entries_no_match_short_circuits_without_save() {
                 reused: false,
             },
             &PasswordPolicy::default(),
-            RotateOpts { backup: true },
+            RotateOpts {
+                backup: true,
+                force: false,
+            },
         )
         .expect("no-match path must succeed");
 
@@ -1432,7 +1507,10 @@ fn rotate_entries_no_backup_still_rotates_and_writes_history() {
                 reused: false,
             },
             &PasswordPolicy::default(),
-            RotateOpts { backup: false },
+            RotateOpts {
+                backup: false,
+                force: false,
+            },
         )
         .unwrap();
     assert!(outcome.changed);
@@ -1471,7 +1549,10 @@ fn rotate_entries_history_delta_is_plus_one_per_match() {
                 length: 24,
                 alphabet: Alphabet::AlphaNum,
             },
-            RotateOpts { backup: false },
+            RotateOpts {
+                backup: false,
+                force: false,
+            },
         )
         .unwrap();
     // After single rotate the password is strong (24-char alpha-num),
@@ -1498,7 +1579,10 @@ fn rotate_entries_history_delta_is_plus_one_per_match() {
                 reused: false,
             },
             &PasswordPolicy::default(),
-            RotateOpts { backup: false },
+            RotateOpts {
+                backup: false,
+                force: false,
+            },
         )
         .unwrap();
     assert_eq!(rotated, vec!["Weak".to_owned()]);
@@ -1530,7 +1614,13 @@ fn apply_fix_batch_empty_is_noop_no_backup() {
     std::thread::sleep(std::time::Duration::from_millis(1100));
 
     let report = vault
-        .apply_fix_batch(Vec::<FixIntent>::new(), RotateOpts { backup: true })
+        .apply_fix_batch(
+            Vec::<FixIntent>::new(),
+            RotateOpts {
+                backup: true,
+                force: false,
+            },
+        )
         .unwrap();
 
     assert!(
@@ -1624,7 +1714,13 @@ fn apply_fix_batch_regenerates_entry_password_with_single_save() {
         },
     ];
     let report = vault
-        .apply_fix_batch(intents, RotateOpts { backup: true })
+        .apply_fix_batch(
+            intents,
+            RotateOpts {
+                backup: true,
+                force: false,
+            },
+        )
         .unwrap();
 
     assert!(report.outcome.changed, "non-empty batch must save");
@@ -1729,7 +1825,13 @@ fn apply_fix_batch_extends_expiry_and_rotates_password_in_one_save() {
         },
     ];
     let report = vault
-        .apply_fix_batch(intents, RotateOpts { backup: true })
+        .apply_fix_batch(
+            intents,
+            RotateOpts {
+                backup: true,
+                force: false,
+            },
+        )
         .unwrap();
     assert_eq!(report.applied.len(), 2);
     assert!(report.outcome.changed);
@@ -1776,7 +1878,13 @@ fn apply_fix_batch_applies_cipher_kdf_format_in_one_save() {
         FixIntent::UpgradeFormat,
     ];
     let report = vault
-        .apply_fix_batch(intents, RotateOpts { backup: true })
+        .apply_fix_batch(
+            intents,
+            RotateOpts {
+                backup: true,
+                force: false,
+            },
+        )
         .unwrap();
     assert_eq!(report.applied.len(), 4);
     assert!(report.outcome.changed);
@@ -1833,7 +1941,13 @@ fn apply_fix_batch_entry_not_found_errors_before_any_save() {
         policy: PasswordPolicy::default(),
     }];
     let err = vault
-        .apply_fix_batch(intents, RotateOpts { backup: true })
+        .apply_fix_batch(
+            intents,
+            RotateOpts {
+                backup: true,
+                force: false,
+            },
+        )
         .expect_err("missing entry must error");
     assert!(
         matches!(
@@ -1887,7 +2001,13 @@ fn apply_fix_batch_rejects_duplicate_db_level_intents() {
         FixIntent::SetOuterCipher(OuterCipher::Aes256),
     ];
     let err = vault
-        .apply_fix_batch(intents, RotateOpts { backup: true })
+        .apply_fix_batch(
+            intents,
+            RotateOpts {
+                backup: true,
+                force: false,
+            },
+        )
         .expect_err("duplicate db-level intent must be rejected");
     assert!(
         matches!(err, freekee_core::Error::InvalidFixBatch(_)),
@@ -1935,7 +2055,13 @@ fn apply_fix_batch_rejects_duplicate_entry_intents_same_kind() {
         },
     ];
     let err = vault
-        .apply_fix_batch(intents, RotateOpts { backup: false })
+        .apply_fix_batch(
+            intents,
+            RotateOpts {
+                backup: false,
+                force: false,
+            },
+        )
         .expect_err("two same-kind intents on the same entry must be rejected");
     assert!(
         matches!(err, freekee_core::Error::InvalidFixBatch(_)),
@@ -1988,7 +2114,13 @@ fn apply_fix_batch_allows_mixed_kinds_on_same_entry() {
         },
     ];
     vault
-        .apply_fix_batch(intents, RotateOpts { backup: false })
+        .apply_fix_batch(
+            intents,
+            RotateOpts {
+                backup: false,
+                force: false,
+            },
+        )
         .expect("different kinds on the same entry must succeed");
 }
 
@@ -2048,5 +2180,265 @@ fn vault_extend_entry_expiry_updates_in_memory_without_save() {
         entry.expires_at(),
         Some(target),
         "explicit save after extend_entry_expiry must persist the new expiry"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Disk fingerprint tracking.
+//
+// `Vault` captures a SHA-256 of the file's outer header on open / first
+// save, and refreshes it after every successful save. This is the cache
+// against which save-time conflict detection compares the on-disk file.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn open_captures_disk_fingerprint() {
+    let fixture = "single-entry";
+    let password = fixture_password(fixture);
+    let (_tmp, dest) = copied_fixture(fixture);
+
+    let vault = Vault::open(&dest, Zeroizing::new(password), None).unwrap();
+    let on_disk = kdbx::Database::read_header_fingerprint(&dest).unwrap();
+    assert_eq!(
+        vault.disk_fingerprint(),
+        Some(on_disk),
+        "Vault::open must cache the fingerprint of the file it opened"
+    );
+}
+
+#[test]
+fn create_captures_disk_fingerprint_from_first_save() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("new.kdbx");
+    let vault = Vault::create(
+        &path,
+        Zeroizing::new("master".to_owned()),
+        None,
+        tiny_template(),
+        false,
+    )
+    .unwrap();
+    let on_disk = kdbx::Database::read_header_fingerprint(&path).unwrap();
+    assert_eq!(
+        vault.disk_fingerprint(),
+        Some(on_disk),
+        "Vault::create must cache the fingerprint of the freshly-written file"
+    );
+}
+
+#[test]
+fn rotation_refreshes_disk_fingerprint() {
+    let fixture = "single-entry";
+    let password = fixture_password(fixture);
+    let (_tmp, dest) = copied_fixture(fixture);
+
+    let mut vault = Vault::open(&dest, Zeroizing::new(password), None).unwrap();
+    let before = vault
+        .disk_fingerprint()
+        .expect("open must capture a fingerprint");
+
+    vault
+        .rotate_kdf_params(
+            Argon2idParams {
+                memory: 16 * 1024,
+                iterations: 2,
+                parallelism: 1,
+            },
+            RotateOpts {
+                backup: false,
+                force: false,
+            },
+        )
+        .unwrap();
+
+    let after = vault
+        .disk_fingerprint()
+        .expect("rotation must refresh the fingerprint");
+    assert_ne!(
+        before, after,
+        "every save regenerates the header; the cached fingerprint must follow"
+    );
+    let on_disk = kdbx::Database::read_header_fingerprint(&dest).unwrap();
+    assert_eq!(
+        after, on_disk,
+        "the refreshed fingerprint must match the new on-disk header"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Conflict detection.
+//
+// When the file's on-disk fingerprint differs from the one cached at open
+// time, the save paths refuse with `Error::ConflictDetected`. The check
+// fires before any mutation reaches disk, so no backup is written either.
+// ---------------------------------------------------------------------------
+
+fn vault_create_at(path: &std::path::Path) {
+    Vault::create(
+        path,
+        Zeroizing::new("pw".to_owned()),
+        None,
+        tiny_template(),
+        false,
+    )
+    .expect("create test vault");
+}
+
+fn rotate_kdf_externally(path: &std::path::Path, iterations: u64) {
+    let mut other =
+        Vault::open(path, Zeroizing::new("pw".to_owned()), None).expect("external open");
+    other
+        .rotate_kdf_params(
+            Argon2idParams {
+                memory: 16 * 1024,
+                iterations,
+                parallelism: 1,
+            },
+            RotateOpts {
+                backup: false,
+                force: false,
+            },
+        )
+        .expect("external rotate");
+}
+
+#[test]
+fn external_write_between_open_and_save_returns_conflict_detected() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    vault_create_at(&dest);
+
+    let mut vault_a = Vault::open(&dest, Zeroizing::new("pw".to_owned()), None).unwrap();
+    // Another process rewrites the file between A's open and A's save.
+    rotate_kdf_externally(&dest, 2);
+
+    let err = vault_a
+        .save()
+        .expect_err("save must detect the external write");
+    assert!(
+        matches!(err, freekee_core::Error::ConflictDetected),
+        "expected ConflictDetected, got {err:?}"
+    );
+}
+
+#[test]
+fn external_write_blocks_rotation_with_conflict_detected_no_backup_written() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    vault_create_at(&dest);
+
+    let mut vault_a = Vault::open(&dest, Zeroizing::new("pw".to_owned()), None).unwrap();
+    rotate_kdf_externally(&dest, 2);
+
+    let err = vault_a
+        .rotate_kdf_params(
+            Argon2idParams {
+                memory: 16 * 1024,
+                iterations: 3,
+                parallelism: 1,
+            },
+            RotateOpts {
+                backup: true,
+                force: false,
+            },
+        )
+        .expect_err("rotation must detect the external write");
+    assert!(
+        matches!(err, freekee_core::Error::ConflictDetected),
+        "expected ConflictDetected, got {err:?}"
+    );
+
+    // The conflict check runs before BackupGuard::create_for; no orphan
+    // backup file should exist in the tempdir.
+    for entry in std::fs::read_dir(tmp.path()).unwrap() {
+        let name = entry.unwrap().file_name();
+        let name_str = name.to_string_lossy();
+        assert!(
+            !name_str.contains(".freekee-bak-"),
+            "conflict check must run before backup; orphan: {name_str}"
+        );
+    }
+}
+
+#[test]
+fn save_force_overrides_conflict_check_and_refreshes_fingerprint() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    vault_create_at(&dest);
+
+    let mut vault_a = Vault::open(&dest, Zeroizing::new("pw".to_owned()), None).unwrap();
+    rotate_kdf_externally(&dest, 2);
+
+    vault_a
+        .save_force()
+        .expect("save_force must override the conflict check");
+    let on_disk = kdbx::Database::read_header_fingerprint(&dest).unwrap();
+    assert_eq!(
+        vault_a.disk_fingerprint(),
+        Some(on_disk),
+        "save_force must refresh the cached fingerprint to the new file"
+    );
+}
+
+#[test]
+fn rotation_with_force_overrides_conflict_check() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    vault_create_at(&dest);
+
+    let mut vault_a = Vault::open(&dest, Zeroizing::new("pw".to_owned()), None).unwrap();
+    rotate_kdf_externally(&dest, 2);
+
+    vault_a
+        .rotate_kdf_params(
+            Argon2idParams {
+                memory: 16 * 1024,
+                iterations: 3,
+                parallelism: 1,
+            },
+            RotateOpts {
+                backup: false,
+                force: true,
+            },
+        )
+        .expect("rotation with force must succeed despite the external write");
+}
+
+#[test]
+fn external_write_blocks_apply_fix_batch_with_conflict_detected() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dest = tmp.path().join("v.kdbx");
+    Vault::create(
+        &dest,
+        Zeroizing::new("pw".to_owned()),
+        None,
+        NewDatabaseTemplate {
+            kdf: Argon2idParams {
+                memory: 8 * 1024,
+                iterations: 1,
+                parallelism: 1,
+            },
+            outer_cipher: OuterCipher::Aes256,
+            inner_cipher: InnerCipher::ChaCha20,
+        },
+        false,
+    )
+    .unwrap();
+
+    let mut vault_a = Vault::open(&dest, Zeroizing::new("pw".to_owned()), None).unwrap();
+    rotate_kdf_externally(&dest, 2);
+
+    let err = vault_a
+        .apply_fix_batch(
+            vec![FixIntent::SetOuterCipher(kdbx::OuterCipher::ChaCha20)],
+            RotateOpts {
+                backup: false,
+                force: false,
+            },
+        )
+        .expect_err("apply_fix_batch must detect the external write");
+    assert!(
+        matches!(err, freekee_core::Error::ConflictDetected),
+        "expected ConflictDetected, got {err:?}"
     );
 }

@@ -21,6 +21,9 @@ pub struct Args {
     /// Read the *new* passphrase from the next line of stdin.
     #[arg(long)]
     pub new_pass_stdin: bool,
+    /// Overwrite the file even if it changed on disk since open.
+    #[arg(long)]
+    pub force: bool,
 }
 
 pub fn run(args: Args) -> anyhow::Result<ExitCode> {
@@ -32,6 +35,7 @@ pub fn run(args: Args) -> anyhow::Result<ExitCode> {
         new_pass,
         RotateOpts {
             backup: !args.no_backup,
+            force: args.force,
         },
     )?;
 

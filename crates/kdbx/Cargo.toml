@@ -19,6 +19,11 @@ serde_json.workspace = true
 # Crate is named `rust-argon2` on crates.io but exposes itself as
 # `argon2` in code. We hardcode `Version13` and never expose the type.
 rust-argon2 = "3.0"
+# Used by `Database::read_header_fingerprint` to hash the unencrypted
+# prefix of a `.kdbx` for concurrent-edit detection in `core::Vault`.
+# Already in the transitive dep graph via `keepass-rs`; pinning here
+# per AGENTS.md (crypto crates need exact pin).
+sha2 = "=0.11.0"
 
 [[bin]]
 name = "dump-expected"

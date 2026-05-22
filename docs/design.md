@@ -89,7 +89,7 @@ Isolation rules:
 
 - `kdbx` has all KDBX awareness. Wraps `keepass-ng` behind a stable trait so upstream churn doesn't ripple.
 - `audit` is pure analysis. Input: parsed database + audit config. Output: findings list. No I/O, no mutation.
-- `core` is the only place these are composed. Owns rotation logic, save/load orchestration, file locking, conflict detection.
+- `core` is the only place these are composed. Owns rotation logic, save/load orchestration, atomic-write semantics, and on-disk conflict detection. Conflict detection is fingerprint-based: `Vault::open` and the successful save tail cache a SHA-256 of the file's unencrypted prefix (`kdbx::Database::read_header_fingerprint`); every save re-reads the on-disk fingerprint before writing and refuses with `Error::ConflictDetected` if it differs. The CLI surfaces `--force` on every mutation/rotation subcommand to override. Atomic save itself (`kdbx::Database::save`) writes to `<path>.freekee-tmp` and `fs::rename`s into place. Same-machine OS advisory locks (fcntl / Windows exclusive open) are deferred — fingerprint detection already covers the same-machine race as a special case.
 - `cli` and `tauri-bridge` are presentation layers; no business logic.
 
 ## 6. The KDBX layer

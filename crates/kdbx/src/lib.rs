@@ -14,11 +14,30 @@ pub use path::{
     NewDatabaseTemplate,
 };
 
-use std::fs::File;
-use std::path::Path;
+use std::fs::{self, File};
+use std::io::Read;
+use std::path::{Path, PathBuf};
 
 use keepass::DatabaseKey;
 use keepass::db::fields;
+use sha2::{Digest, Sha256};
+
+/// Number of leading bytes hashed by [`Database::read_header_fingerprint`].
+/// KDBX 4 outer headers are always <1 KiB; 2 KiB covers them plus enough
+/// of the HMAC-block stream that the first block's IV is included. Any
+/// re-save regenerates at least one of: master_seed, KDF salt, transform
+/// seed, encryption IV — so this prefix changes on every save.
+const HEADER_FINGERPRINT_PREFIX: usize = 2048;
+
+/// Sibling path used by [`Database::save`] as the atomic-write staging
+/// file. Appends `.freekee-tmp` to the full target path so the original
+/// extension is preserved and the staging file sorts next to the target
+/// in directory listings.
+fn freekee_tmp_path(path: &Path) -> PathBuf {
+    let mut buf = path.as_os_str().to_owned();
+    buf.push(".freekee-tmp");
+    PathBuf::from(buf)
+}
 
 /// KDBX file format version, mirroring the four upstream variants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -102,15 +121,54 @@ impl Database {
     /// must match what readers will use to reopen the file: pass
     /// `keyfile = Some(path)` for keyfile-protected databases, `None`
     /// for passphrase-only ones. KDBX4 only.
+    ///
+    /// The save is atomic: the serialized bytes are written to
+    /// `<path>.freekee-tmp` and then `fs::rename`d into place. A crash
+    /// or error between truncate and final flush cannot corrupt the
+    /// existing file. On a `rename` failure the tempfile is left in
+    /// place as evidence for the user; the next successful save will
+    /// overwrite it.
     pub fn save(&self, path: &Path, password: &str, keyfile: Option<&Path>) -> Result<()> {
-        let mut file = File::create(path)?;
         let mut key = DatabaseKey::new().with_password(password);
         if let Some(kf_path) = keyfile {
             let mut kf = File::open(kf_path)?;
             key = key.with_keyfile(&mut kf)?;
         }
-        self.inner.save(&mut file, key)?;
+        let tmp = freekee_tmp_path(path);
+        {
+            let mut file = File::create(&tmp)?;
+            self.inner.save(&mut file, key)?;
+        }
+        fs::rename(&tmp, path)?;
         Ok(())
+    }
+
+    /// Hash the file's unencrypted prefix and return a 32-byte digest.
+    ///
+    /// Used by `core::Vault` to detect concurrent edits between open and
+    /// save: capture the fingerprint at open time, re-read just before
+    /// saving, and refuse the save if the digest changed. KDBX 4 saves
+    /// regenerate `master_seed`, the KDF salt, the transform seed, and
+    /// the encryption IV — all of which live in the first ~1 KiB of the
+    /// file — so this fingerprint changes on every save by any client.
+    ///
+    /// This function does not parse, decrypt, or verify the file. It is
+    /// safe to call without credentials and is cheap (a single small
+    /// read plus a SHA-256).
+    pub fn read_header_fingerprint(path: &Path) -> Result<[u8; 32]> {
+        let mut file = File::open(path)?;
+        let mut buf = [0u8; HEADER_FINGERPRINT_PREFIX];
+        let mut filled = 0usize;
+        while filled < HEADER_FINGERPRINT_PREFIX {
+            let n = file.read(&mut buf[filled..])?;
+            if n == 0 {
+                break;
+            }
+            filled += n;
+        }
+        let mut hasher = Sha256::new();
+        hasher.update(&buf[..filled]);
+        Ok(hasher.finalize().into())
     }
 
     /// Fill in numeric fields that `cs_opt_fromstr` serializes as empty

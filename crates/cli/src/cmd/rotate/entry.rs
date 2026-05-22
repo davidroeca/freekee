@@ -53,6 +53,9 @@ pub struct Args {
     pub keyfile: Option<PathBuf>,
     #[arg(long)]
     pub pass_stdin: bool,
+    /// Overwrite the file even if it changed on disk since open.
+    #[arg(long)]
+    pub force: bool,
 }
 
 pub fn run(args: Args) -> anyhow::Result<ExitCode> {
@@ -76,6 +79,7 @@ pub fn run(args: Args) -> anyhow::Result<ExitCode> {
         &policy,
         RotateOpts {
             backup: !args.no_backup,
+            force: args.force,
         },
     )?;
 

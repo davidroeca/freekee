@@ -21,6 +21,9 @@ pub struct Args {
     pub keyfile: Option<PathBuf>,
     #[arg(long)]
     pub pass_stdin: bool,
+    /// Overwrite the file even if it changed on disk since open.
+    #[arg(long)]
+    pub force: bool,
 }
 
 pub fn run(args: Args) -> anyhow::Result<ExitCode> {
@@ -35,6 +38,10 @@ pub fn run(args: Args) -> anyhow::Result<ExitCode> {
     let dst_path: EntryPath<'_> = super::entry_path_from(&dst_segments, &mut dst_scratch);
 
     vault.move_entry(src_path, dst_path)?;
-    vault.save()?;
+    if args.force {
+        vault.save_force()?;
+    } else {
+        vault.save()?;
+    }
     Ok(ExitCode::SUCCESS)
 }

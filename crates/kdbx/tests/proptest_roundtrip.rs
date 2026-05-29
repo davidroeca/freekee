@@ -10,6 +10,7 @@
 
 #![allow(clippy::disallowed_methods, clippy::unwrap_used)]
 
+use chrono::{DateTime, NaiveDateTime, Utc};
 use kdbx::{
     Argon2idParams, Database, EntryDraft, EntryField, EntryFieldValue, EntryPath, GroupPath,
     InnerCipher, NewDatabaseTemplate, OuterCipher,
@@ -77,6 +78,39 @@ fn arb_ident() -> impl Strategy<Value = String> {
 
 fn arb_custom_key() -> impl Strategy<Value = String> {
     "[a-zA-Z][a-zA-Z0-9_-]{0,11}".prop_map(String::from)
+}
+
+// Argon2id parameters that always satisfy the upstream validator's floor
+// (rust-argon2 requires `mem_cost >= 8 * lanes`, where `mem_cost` is
+// `memory_bytes / 1024`). `memory` is carried in *bytes*, so we build it
+// from `mem_kib * 1024` with `mem_kib >= 8 * parallelism`. Ranges are kept
+// small on purpose: every case runs two real Argon2 derivations (save +
+// verify-on-open), so this stays cheap at 32 cases.
+fn arb_kdf_params() -> impl Strategy<Value = Argon2idParams> {
+    (1u32..=2).prop_flat_map(|parallelism| {
+        ((8 * parallelism)..=32u32, 1u64..=2).prop_map(move |(mem_kib, iterations)| {
+            Argon2idParams {
+                memory: u64::from(mem_kib) * 1024,
+                iterations,
+                parallelism,
+            }
+        })
+    })
+}
+
+// `None`, or a whole-second timestamp in a modern range (~2001-2096).
+// KDBX serializes times at second precision, so sub-second values would
+// not round-trip; building from `from_timestamp(secs, 0)` guarantees no
+// nanosecond component to lose.
+fn arb_whole_second_expiry() -> impl Strategy<Value = Option<NaiveDateTime>> {
+    prop_oneof![
+        Just(None),
+        (1_000_000_000i64..=4_000_000_000).prop_map(|secs| Some(
+            DateTime::<Utc>::from_timestamp(secs, 0)
+                .unwrap()
+                .naive_utc()
+        )),
+    ]
 }
 
 fn save_open_roundtrip(db: &Database) -> Database {
@@ -268,6 +302,100 @@ proptest! {
             EntryPath { groups: &[&dst_group], title: &title },
         ).unwrap();
         let reopened = save_open_roundtrip(&db);
+        prop_assert_eq!(db, reopened);
+    }
+
+    /// 5. Argon2id parameter variation. Every other test fixes
+    /// `tiny_kdf()`; this varies memory / iterations / parallelism within
+    /// the validator's floor and asserts the params survive save → open.
+    /// Generative sibling of the example-based `set_kdf_params` test in
+    /// `mutate.rs`.
+    #[test]
+    fn prop_kdf_params_roundtrip(params in arb_kdf_params()) {
+        let mut db = Database::new_empty(template(
+            OuterCipher::ChaCha20,
+            InnerCipher::ChaCha20,
+        ));
+        db.set_kdf_params(params).unwrap();
+        let reopened = save_open_roundtrip(&db);
+        prop_assert_eq!(db, reopened);
+    }
+
+    /// 6. Entry expiry round-trip across the `Some(ts)` set path and the
+    /// `None` clear path. Timestamps are whole seconds (see
+    /// `arb_whole_second_expiry`). Generative sibling of the example-based
+    /// expiry persist / clear tests in `mutate.rs`.
+    #[test]
+    fn prop_entry_expiry_roundtrip(
+        title in arb_ident(),
+        expiry in arb_whole_second_expiry(),
+    ) {
+        let mut db = Database::new_empty(template(
+            OuterCipher::ChaCha20,
+            InnerCipher::ChaCha20,
+        ));
+        let path = EntryPath { groups: &[], title: &title };
+        db.add_entry(path, EntryDraft::default()).unwrap();
+        db.set_entry_expiry(path, expiry).unwrap();
+        let reopened = save_open_roundtrip(&db);
+        prop_assert_eq!(db, reopened);
+    }
+
+    /// 7. History accumulation. Each `set_entry_field` snapshots the prior
+    /// version via `edit_tracking`, so N successive edits yield N history
+    /// versions (a freshly-added entry starts at zero). Asserts both the
+    /// full structural round-trip and the surviving `history_count`. N ≤ 5
+    /// stays under the default `history_max_items = 10`, so no pruning.
+    #[test]
+    fn prop_entry_history_roundtrip(
+        title in arb_ident(),
+        values in proptest::collection::vec(arb_text(32), 1..=5),
+    ) {
+        let mut db = Database::new_empty(template(
+            OuterCipher::ChaCha20,
+            InnerCipher::ChaCha20,
+        ));
+        let path = EntryPath { groups: &[], title: &title };
+        db.add_entry(path, EntryDraft::default()).unwrap();
+        for v in &values {
+            db.set_entry_field(path, EntryField::Password, EntryFieldValue::Protected(v))
+                .unwrap();
+        }
+        let reopened = save_open_roundtrip(&db);
+        prop_assert_eq!(
+            reopened.entry_by_path(path).unwrap().history_count(),
+            values.len()
+        );
+        prop_assert_eq!(db, reopened);
+    }
+
+    /// 8. Delete registry. `remove_entry` registers each UUID in
+    /// `deleted_objects` (KeePassXC sync correctness). Builds 1-3 entries,
+    /// removes a generated subset, and asserts both the structural
+    /// round-trip and the surviving `deleted_object_count`.
+    #[test]
+    fn prop_delete_registry_roundtrip(
+        titles in proptest::collection::hash_set(arb_ident(), 1..=3),
+        remove_mask in proptest::collection::vec(any::<bool>(), 1..=3),
+    ) {
+        let titles: Vec<String> = titles.into_iter().collect();
+        let mut db = Database::new_empty(template(
+            OuterCipher::ChaCha20,
+            InnerCipher::ChaCha20,
+        ));
+        for title in &titles {
+            db.add_entry(EntryPath { groups: &[], title }, EntryDraft::default())
+                .unwrap();
+        }
+        let mut removed = 0usize;
+        for (title, remove) in titles.iter().zip(remove_mask.iter().cycle()) {
+            if *remove {
+                db.remove_entry(EntryPath { groups: &[], title }).unwrap();
+                removed += 1;
+            }
+        }
+        let reopened = save_open_roundtrip(&db);
+        prop_assert_eq!(reopened.deleted_object_count(), removed);
         prop_assert_eq!(db, reopened);
     }
 }

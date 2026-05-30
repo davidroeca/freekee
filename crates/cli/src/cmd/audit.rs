@@ -17,9 +17,17 @@ pub struct Args {
     /// Exit non-zero if any finding has severity >= Medium.
     #[arg(long)]
     pub strict: bool,
+    /// Check entry passwords against Have I Been Pwned (k-anonymity:
+    /// only the first 5 chars of each password's SHA-1 hash are sent).
+    /// Opt-in; off by default. Requires network access.
+    #[arg(long)]
+    pub hibp: bool,
     #[arg(long)]
     pub pass_stdin: bool,
 }
+
+/// HIBP range API base. Overridable so tests can target a local stub.
+const HIBP_DEFAULT_BASE_URL: &str = "https://api.pwnedpasswords.com";
 
 pub fn run(args: Args) -> anyhow::Result<ExitCode> {
     let pass = super::read_passphrase(args.pass_stdin)?;
@@ -29,7 +37,14 @@ pub fn run(args: Args) -> anyhow::Result<ExitCode> {
         CompositeKeyInfo::PassphraseOnly
     };
     let db = kdbx::Database::open(&args.path, &pass, args.keyfile.as_deref())?;
-    let findings = ::audit::run(&db, &pass, composite, &AuditConfig::default());
+    let mut findings = ::audit::run(&db, &pass, composite, &AuditConfig::default());
+
+    if args.hibp {
+        let base = std::env::var("FREEKEE_HIBP_BASE_URL")
+            .unwrap_or_else(|_| HIBP_DEFAULT_BASE_URL.to_owned());
+        let client = freekee_core::HttpRangeClient::new(base);
+        findings.extend(freekee_core::breached_passwords(&db, &client)?);
+    }
 
     if args.json {
         let buf = serde_json::to_string_pretty(&findings)?;

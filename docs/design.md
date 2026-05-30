@@ -127,7 +127,7 @@ The audit crate is freekee's headline differentiator. It takes a parsed database
 - `weak-entry-password`: zxcvbn < 50 bits. Severity: medium per entry.
 - `reused-password`: same password across multiple entries. Severity: medium.
 - `stale-password`: not changed in > 180 days (configurable). Severity: low.
-- `breached-password`: HIBP k-anonymity API match. Severity: critical. **Opt-in only**, off by default.
+- `breached-password`: HIBP k-anonymity API match. Severity: critical. **Opt-in only**, off by default — enabled per-invocation with `freekee audit --hibp`. Only the first 5 hex chars of each entry password's SHA-1 hash are sent; the full hash, suffix, and password never leave the machine. The pure k-anonymity logic lives in `audit` (no I/O); the network range query lives in `core::hibp`. The "prompt once, store the decision in OS config" UX (§12) is still deferred — for now it is the flag only.
 - `expired-entry-overdue`: entry's `Expires` is in the past. Severity: low.
 
 **Attachments:**

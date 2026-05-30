@@ -684,6 +684,67 @@ fn no_canary_substrings_in_any_command_output() {
             "newly-generated entry password must not echo to stderr: {stderr}"
         );
     }
+
+    // `audit --hibp`: the breached-password path hashes the entry
+    // password with SHA-1 and sends only the 5-char prefix. Neither the
+    // password nor its full SHA-1 hash may appear in any stream. The
+    // localhost stub returns the canary's own suffix so the entry is
+    // actually flagged breached, exercising the finding-emission path.
+    {
+        use std::io::{Read, Write};
+        let dir = tempfile::tempdir().expect("tempdir");
+        let canary = dir.path().join("canary.kdbx");
+        build_canary(&canary);
+
+        let (prefix, suffix) = audit::hibp_range_split(CANARY_ENTRY_PASSWORD);
+        let full_hash = format!("{prefix}{suffix}");
+        let body = format!("{suffix}:1337\r\n");
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind stub");
+        let base = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let mut stream = stream.unwrap();
+                let mut buf = [0u8; 1024];
+                let _ = stream.read(&mut buf);
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body,
+                );
+                let _ = stream.write_all(resp.as_bytes());
+            }
+        });
+
+        let out = freekee()
+            .arg("audit")
+            .arg("--db")
+            .arg(&canary)
+            .arg("--hibp")
+            .arg("--pass-stdin")
+            .env("FREEKEE_HIBP_BASE_URL", &base)
+            .write_stdin(format!("{CANARY_PASSPHRASE}\n"))
+            .output()
+            .expect("run audit --hibp");
+        assert!(
+            out.status.success(),
+            "audit --hibp must succeed; stderr: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        // Sanity: the breached path actually fired against the stub.
+        assert!(
+            String::from_utf8_lossy(&out.stdout).contains("breached-password"),
+            "stub should have flagged the canary entry as breached"
+        );
+        assert_no_canary_in("audit --hibp", &out.stdout, &out.stderr);
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !stdout.contains(&full_hash) && !stderr.contains(&full_hash),
+            "full SHA-1 of the entry password must never appear in output: \
+             stdout={stdout} stderr={stderr}"
+        );
+    }
 }
 
 /// Write 64 deterministic-pseudo-random bytes to act as a keyfile in

@@ -43,6 +43,9 @@ pub enum Error {
 
     #[error("config: {0}")]
     Config(String),
+
+    #[error("breached-password lookup failed: {0}")]
+    Hibp(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

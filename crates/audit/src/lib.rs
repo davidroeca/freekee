@@ -3,9 +3,11 @@
 //! Pure analysis: takes a parsed database, returns findings. No I/O,
 //! no mutation. See `docs/design.md` section 7. Rules live under `rules/`.
 
+mod hibp;
 mod rules;
 mod strength;
 
+pub use hibp::{breach_count, breached_password_finding, hibp_range_split};
 pub use rules::entries_select::{reused_entry_targets, stale_entry_targets, weak_entry_targets};
 pub use strength::passphrase_bits;
 
